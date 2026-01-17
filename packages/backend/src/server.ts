@@ -112,6 +112,28 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
+// UPDATE AN EMPLOYEE
+app.put('/api/employees/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { firstName, lastName, role } = req.body;
+
+    const updatedEmployee = await db.employee.update({
+      where: { id },
+      data: {
+        firstName,
+        lastName,
+        role,
+      },
+    });
+
+    res.json(updatedEmployee);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to update employee' });
+  }
+});
+
 // --- START SERVER ---
 app.listen(PORT, () => {
   console.log(`\n⚡️ Server is running on port ${PORT}`);
