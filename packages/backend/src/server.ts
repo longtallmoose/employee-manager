@@ -1,21 +1,26 @@
-// packages/backend/src/server.ts
 import express from 'express';
 import cors from 'cors';
 import { AuthService } from './services/auth-service';
 import { db } from './lib/db';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import dotenv from 'dotenv';
+
+// Load environment variables
+dotenv.config();
 
 const app = express();
-const PORT = 4000;
 
-// Middleware (Allows us to read JSON data)
+// CRITICAL FIX: Use the port Render gives us, or fallback to 4000 locally
+const PORT = process.env.PORT || 4000;
+
+// Middleware (Allows the frontend to talk to the backend)
 app.use(cors());
 app.use(express.json());
 
 // --- ROUTES ---
 
-// Health Check (To test if server is running)
+// Health Check
 app.get('/', (req, res) => {
   res.send('Employee Platform API is Active 🚀');
 });
@@ -24,12 +29,10 @@ app.get('/', (req, res) => {
 app.post('/api/auth/register', async (req, res) => {
   const { email, password, firstName, lastName, role } = req.body;
 
-  // Basic validation
   if (!email || !password || !firstName || !lastName) {
     return res.status(400).json({ success: false, message: 'Missing fields' });
   }
 
-  // Call the service we just built
   const result = await AuthService.register({
     email,
     password,
@@ -49,7 +52,7 @@ app.post('/api/auth/register', async (req, res) => {
 app.get('/api/employees', async (req, res) => {
   try {
     const employees = await db.employee.findMany({
-      orderBy: { createdAt: 'desc' } // Newest first
+      orderBy: { createdAt: 'desc' }
     });
     res.json(employees);
   } catch (error) {
@@ -60,7 +63,7 @@ app.get('/api/employees', async (req, res) => {
 // DELETE AN EMPLOYEE
 app.delete('/api/employees/:id', async (req, res) => {
   try {
-    const { id } = req.params; // Get the ID from the URL
+    const { id } = req.params;
     await db.employee.delete({
       where: { id },
     });
@@ -85,24 +88,22 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     // 2. Check the password
-    // We compare the 'password' sent by the user with 'passwordHash' in the DB
-    // (Note: In a real app, we would use bcrypt.compare(password, user.passwordHash))
-    // Use bcrypt to compare the plain password with the stored hash
     const isValid = await bcrypt.compare(password, user.passwordHash);
     
     if (!isValid) {
       return res.status(400).json({ error: 'Invalid password' });
     }
 
-    // 3. Generate the "ID Card" (Token)
+    // 3. Generate the Token using the Environment Variable (Secure)
+    // If JWT_SECRET is missing, it falls back to 'super_secret' (preventing crashes)
+    const secret = process.env.JWT_SECRET || 'super_secret';
+    
     const token = jwt.sign(
       { userId: user.id, email: user.email },
-      'SUPER_SECRET_KEY', 
+      secret, 
       { expiresIn: '1h' }
     );
 
-    // 4. Send the token back
-    // (We removed firstName because it's not in the User table)
     res.json({ token, user: { email: user.email } });
 
   } catch (error) {
@@ -113,6 +114,5 @@ app.post('/api/auth/login', async (req, res) => {
 
 // --- START SERVER ---
 app.listen(PORT, () => {
-  console.log(`\n⚡️ Server is running on http://localhost:${PORT}`);
-  console.log(`   Database connected: postgresql://localhost:5432/employee_db\n`);
+  console.log(`\n⚡️ Server is running on port ${PORT}`);
 });
