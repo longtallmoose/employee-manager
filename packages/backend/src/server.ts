@@ -21,7 +21,7 @@ app.get('/', (req, res) => {
   res.send('Vanguard HR Engine: Active 🚀');
 });
 
-// 1. REGISTER NEW STAFF
+// 1. REGISTER NEW STAFF (Flat Transaction Fix)
 app.post('/api/auth/register', async (req, res) => {
   try {
     const { email, password, firstName, lastName, role, jobTitle, department, payAmount } = req.body;
@@ -29,34 +29,39 @@ app.post('/api/auth/register', async (req, res) => {
     const result = await db.$transaction(async (tx) => {
       const hashedPassword = await bcrypt.hash(password, 10);
       
+      // Step 1: Create User
       const user = await tx.user.create({
         data: {
           email,
           passwordHash: hashedPassword,
-          // @ts-ignore - Forcing role through generation lag
+          // @ts-ignore
           role: role || 'EMPLOYEE',
         },
       });
 
+      // Step 2: Create Employee
       const employee = await tx.employee.create({
         data: {
           userId: user.id,
           firstName,
           lastName,
-          // @ts-ignore - Forcing records through generation lag
-          records: {
-            create: {
-              jobTitle: jobTitle || 'New Starter',
-              department: department || 'OPERATIONS',
-              location: 'Head Office',
-              payAmount: payAmount || 0,
-              startDate: new Date(),
-              employmentType: 'FULL_TIME',
-              payBasis: 'SALARIED',
-              hoursPerWeek: 37.5,
-              changeReason: 'Initial Hire'
-            }
-          }
+        }
+      });
+
+      // Step 3: Create Initial Employment Record (The "Engine" part)
+      // @ts-ignore
+      await tx.employmentRecord.create({
+        data: {
+          employeeId: employee.id,
+          jobTitle: jobTitle || 'New Starter',
+          department: department || 'OPERATIONS',
+          location: 'Head Office',
+          payAmount: payAmount || 0,
+          startDate: new Date(),
+          employmentType: 'FULL_TIME',
+          payBasis: 'SALARIED',
+          hoursPerWeek: 37.5,
+          changeReason: 'Initial Hire'
         }
       });
 
@@ -87,6 +92,7 @@ app.put('/api/employees/:id', async (req, res) => {
         data: { endDate: new Date() }
       });
 
+      // @ts-ignore
       const newRecord = await tx.employmentRecord.create({
         data: {
           employeeId: id,
@@ -117,6 +123,7 @@ app.get('/api/employees', async (req, res) => {
   try {
     const employees = await db.employee.findMany({
       include: {
+        // @ts-ignore
         records: { where: { endDate: null }, take: 1 }
       },
       orderBy: { createdAt: 'desc' }
@@ -138,7 +145,7 @@ app.post('/api/auth/login', async (req, res) => {
     if (!isValid) return res.status(400).json({ error: 'Invalid password' });
 
     const token = jwt.sign(
-      // @ts-ignore - Role exists in DB but TS is lagging
+      // @ts-ignore
       { userId: user.id, email: user.email, role: user.role },
       process.env.JWT_SECRET || 'secret',
       { expiresIn: '8h' }
