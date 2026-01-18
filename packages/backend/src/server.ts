@@ -13,14 +13,14 @@ const PORT = process.env.PORT || 4000;
 app.use(cors({ origin: '*', credentials: true }));
 app.use(express.json());
 
-// 1. REGISTER (Fixed Atomic Intake)
+// 1. ONBOARD (Creates User + Employee + EmploymentRecord)
 app.post('/api/auth/register', async (req, res) => {
   try {
-    const { email, password, firstName, lastName, role, jobTitle, department, payAmount, niNumber, addressLine1, postcode, emergencyName, emergencyPhone } = req.body;
+    const { email, password, firstName, lastName, jobTitle, department, payAmount, niNumber, addressLine1, postcode, emergencyName, emergencyPhone } = req.body;
     const result = await db.$transaction(async (tx) => {
       const hashedPassword = await bcrypt.hash(password || 'TempPass123!', 10);
       const user = await tx.user.create({
-        data: { email, passwordHash: hashedPassword, role: (role as any) || 'EMPLOYEE' },
+        data: { email, passwordHash: hashedPassword, role: 'EMPLOYEE' },
       });
       const employee = await tx.employee.create({
         data: {
@@ -41,12 +41,12 @@ app.post('/api/auth/register', async (req, res) => {
     });
     res.status(201).json(result);
   } catch (error) {
-    console.error("Registration Error:", error);
+    console.error(error);
     res.status(500).json({ error: 'Registration failed' });
   }
 });
 
-// 2. UPDATE (Fixed Versioning & Personal Data Sync)
+// 2. UPDATE (Handles Personal Edit + Job/Salary Versioning)
 app.put('/api/employees/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -54,12 +54,12 @@ app.put('/api/employees/:id', async (req, res) => {
 
     const result = await db.$transaction(async (tx) => {
       // Update Personal Data
-      const employee = await tx.employee.update({
+      await tx.employee.update({
         where: { id },
         data: { firstName, lastName, niNumber, addressLine1, postcode, emergencyName, emergencyPhone }
       });
 
-      // Versioning: Only create new record if Job/Pay details changed
+      // Versioning Logic: Close old record, open new one
       await tx.employmentRecord.updateMany({
         where: { employeeId: id, endDate: null },
         data: { endDate: new Date() }
@@ -73,53 +73,39 @@ app.put('/api/employees/:id', async (req, res) => {
           changeReason: 'Dossier Update', changedBy: 'ADMIN'
         }
       });
-      return employee;
+      return { success: true };
     });
     res.json(result);
   } catch (error) {
-    console.error("Update Error:", error);
+    console.error(error);
     res.status(500).json({ error: 'Update failed' });
   }
 });
 
-// 3. DELETE (Fixed Cascading Delete)
+// 3. DELETE (Cascading Fix)
 app.delete('/api/employees/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const emp = await db.employee.findUnique({ where: { id } });
-    if (!emp) return res.status(404).json({ error: "Employee not found" });
-
-    // Atomic Cascading Delete: Records -> Employee -> User
-    await db.$transaction([
-      db.employmentRecord.deleteMany({ where: { employeeId: id } }),
-      db.employee.delete({ where: { id } }),
-      db.user.delete({ where: { id: emp.userId } })
-    ]);
-    
+    if (emp) {
+      await db.$transaction([
+        db.employmentRecord.deleteMany({ where: { employeeId: id } }),
+        db.employee.delete({ where: { id } }),
+        db.user.delete({ where: { id: emp.userId } })
+      ]);
+    }
     res.json({ success: true });
   } catch (error) {
-    console.error("Delete Error:", error);
-    res.status(500).json({ error: 'Delete failed - Database constraint' });
+    res.status(500).json({ error: 'Delete failed' });
   }
 });
 
 app.get('/api/employees', async (req, res) => {
   const employees = await db.employee.findMany({
-    include: { records: { where: { endDate: null }, orderBy: { startDate: 'desc' }, take: 1 } },
+    include: { records: { where: { endDate: null }, take: 1 } },
     orderBy: { createdAt: 'desc' }
   });
   res.json(employees);
 });
 
-app.post('/api/auth/login', async (req, res) => {
-  const { email, password } = req.body;
-  const user = await db.user.findUnique({ where: { email } });
-  if (user && await bcrypt.compare(password, user.passwordHash)) {
-    const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET || 'secret');
-    res.json({ token });
-  } else {
-    res.status(401).json({ error: 'Unauthorized' });
-  }
-});
-
-app.listen(PORT, () => console.log(`🚀 Vanguard Engine Live on ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Engine Live on ${PORT}`));
