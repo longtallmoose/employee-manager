@@ -173,4 +173,38 @@ app.post('/api/cases/:id/timeline', async (req, res) => {
   } catch (error) { res.status(500).json({ error: 'Failed to add event' }); }
 });
 
+// --- NEW: AUTHENTICATION MIDDLEWARE & /ME ENDPOINT ---
+
+// Middleware to verify JWT Token
+const authenticate = (req: any, res: any, next: any) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  if (!token) return res.status(401).json({ error: 'Authentication required' });
+  
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret') as any;
+    req.userId = decoded.userId;
+    next();
+  } catch (err) {
+    res.status(401).json({ error: 'Invalid or expired token' });
+  }
+};
+
+// GET /api/auth/me - Returns the logged-in employee's profile
+app.get('/api/auth/me', authenticate, async (req: any, res: any) => {
+  try {
+    const employee = await db.employee.findUnique({
+      where: { userId: req.userId },
+      include: { 
+        records: { orderBy: { startDate: 'desc' } }, // Career History
+        cases: true // Any cases they are involved in
+      }
+    });
+    
+    if (!employee) return res.status(404).json({ error: 'Employee profile not found' });
+    res.json(employee);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch profile' });
+  }
+});
+
 app.listen(PORT, () => console.log(`🚀 Engine Live on ${PORT}`));
