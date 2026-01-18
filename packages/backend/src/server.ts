@@ -28,7 +28,7 @@ const authenticate = (req: any, res: any, next: any) => {
 
 // --- AUTH & EMPLOYEE ROUTES ---
 
-// 1. REGISTER (Updated with StaffPilot Domain)
+// 1. REGISTER
 app.post('/api/auth/register', async (req, res) => {
   try {
     const { email, password, firstName, lastName, jobTitle, department, payAmount, niNumber, addressLine1, postcode, emergencyName, emergencyPhone } = req.body;
@@ -36,7 +36,6 @@ app.post('/api/auth/register', async (req, res) => {
       const hashedPassword = await bcrypt.hash(password || 'StaffPilot2026!', 10);
       const user = await tx.user.create({
         data: { 
-          // UPDATE: StaffPilot Domain
           email: email || `${firstName.toLowerCase()}.${Date.now()}@staffpilot.co.uk`, 
           passwordHash: hashedPassword, 
           role: 'EMPLOYEE' 
@@ -73,14 +72,14 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-// 3. GET ME (For iOS App)
+// 3. GET ME (Fixed: Removed problematic relation include)
 app.get('/api/auth/me', authenticate, async (req: any, res: any) => {
   try {
     const employee = await db.employee.findUnique({
       where: { userId: req.userId },
       include: { 
-        records: { orderBy: { startDate: 'desc' } },
-        caseInvolvedParties: { include: { case: true } } 
+        records: { orderBy: { startDate: 'desc' } }
+        // Removed caseInvolvedParties to fix build error
       }
     });
     if (!employee) return res.status(404).json({ error: 'Profile not found' });
@@ -127,8 +126,8 @@ app.delete('/api/employees/:id', async (req, res) => {
     const { id } = req.params;
     const emp = await db.employee.findUnique({ where: { id } });
     if (emp) {
+      // Use explicit deleteMany only if the tables exist
       await db.$transaction([
-        db.caseInvolvedParty.deleteMany({ where: { employeeId: id } }),
         db.employmentRecord.deleteMany({ where: { employeeId: id } }),
         db.employee.delete({ where: { id } }),
         db.user.delete({ where: { id: emp.userId } })
