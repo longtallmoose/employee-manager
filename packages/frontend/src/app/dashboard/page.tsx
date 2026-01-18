@@ -3,8 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
-  Users, ShieldCheck, X, ChevronRight, Search, Plus, 
-  Trash2, Building2, PoundSterling, History, MapPin, 
+  Users, Clock, ShieldCheck, X, ChevronRight, Search, Plus, 
+  Trash2, Building2, PoundSterling, History, Lock, MapPin, 
   Phone, CreditCard, HeartPulse, Save, Edit3, UserPlus, 
   Briefcase, Scale, AlertTriangle, Gavel
 } from 'lucide-react';
@@ -16,8 +16,6 @@ export default function Dashboard() {
   // Data
   const [employees, setEmployees] = useState<any[]>([]);
   const [cases, setCases] = useState<any[]>([]);
-  
-  // Search
   const [searchTerm, setSearchTerm] = useState('');
   
   // UI States
@@ -29,7 +27,7 @@ export default function Dashboard() {
   const [showSensitive, setShowSensitive] = useState(false);
   const [profileTab, setProfileTab] = useState('Overview');
   
-  // Modals
+  // Modals & Loading
   const [isAddingNew, setIsAddingNew] = useState(false);
   const [isAddingCase, setIsAddingCase] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -47,10 +45,8 @@ export default function Dashboard() {
   });
 
   const [newTimelineEvent, setNewTimelineEvent] = useState('');
-
   const API_BASE = "https://employee-api-3oyj.onrender.com/api";
 
-  // --- FETCHERS ---
   const fetchData = async () => {
     try {
       const [empRes, caseRes] = await Promise.all([
@@ -59,11 +55,9 @@ export default function Dashboard() {
       ]);
       const empData = await empRes.json();
       const caseData = await caseRes.json();
-      
       setEmployees(empData);
       setCases(caseData);
 
-      // Refresh Panels if open
       if (selectedEmployee) {
         const updated = empData.find((e:any) => e.id === selectedEmployee.id);
         if (updated) setSelectedEmployee(updated);
@@ -77,9 +71,9 @@ export default function Dashboard() {
 
   useEffect(() => { fetchData(); }, []);
 
-  // --- EMPLOYEE ACTIONS ---
+  // --- ACTIONS ---
   const handleCreateEmployee = async () => {
-    if (!newEmployee.firstName) return alert("Required fields missing");
+    if (!newEmployee.firstName) return alert("Missing fields");
     setIsSaving(true);
     await fetch(`${API_BASE}/auth/register`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newEmployee) });
     setIsAddingNew(false);
@@ -119,9 +113,8 @@ export default function Dashboard() {
     setSelectedEmployee({ ...selectedEmployee, records: updatedRecords });
   };
 
-  // --- CASE ACTIONS ---
   const handleCreateCase = async () => {
-    if (!newCaseData.subjectId || !newCaseData.summary) return alert("Subject and Summary required");
+    if (!newCaseData.subjectId || !newCaseData.summary) return alert("Required fields missing");
     setIsSaving(true);
     await fetch(`${API_BASE}/cases`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newCaseData) });
     setIsAddingCase(false);
@@ -142,14 +135,12 @@ export default function Dashboard() {
 
   const getSortedRecords = (records: any[]) => [...(records || [])].sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime());
 
-  // --- RENDER ---
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden text-slate-900 font-sans">
-      {/* SIDEBAR */}
       <aside className="w-64 bg-slate-900 text-slate-300 flex flex-col z-20 shadow-2xl">
         <div className="p-6 flex items-center gap-3 border-b border-slate-800">
           <div className="bg-blue-600 p-2 rounded-lg shadow-lg"><ShieldCheck className="text-white w-6 h-6" /></div>
-          <span className="font-bold text-xl text-white tracking-tight">Vanguard HR</span>
+          <span className="font-bold text-xl text-white tracking-tight">StaffPilot</span>
         </div>
         <nav className="flex-1 mt-6 px-3 space-y-2">
           <button onClick={() => setActiveTab('Employees')} className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-all ${activeTab === 'Employees' ? 'bg-blue-600 text-white shadow-lg' : 'hover:bg-slate-800'}`}>
@@ -161,7 +152,6 @@ export default function Dashboard() {
         </nav>
       </aside>
 
-      {/* MAIN CONTENT */}
       <main className="flex-1 flex flex-col overflow-y-auto relative">
         <header className="bg-white h-16 border-b flex items-center justify-between px-8 sticky top-0 z-10">
           <div className="flex items-center gap-4 bg-slate-100 px-4 py-2 rounded-full w-96 border">
@@ -184,7 +174,6 @@ export default function Dashboard() {
             )}
           </div>
 
-          {/* TABLE: EMPLOYEES */}
           {activeTab === 'Employees' && (
             <div className="bg-white rounded-[2rem] border shadow-sm overflow-hidden">
               <table className="w-full text-left">
@@ -202,11 +191,10 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* TABLE: CASES */}
           {activeTab === 'Cases' && (
             <div className="bg-white rounded-[2rem] border shadow-sm overflow-hidden">
               <table className="w-full text-left">
-                <thead className="bg-slate-50 border-b text-slate-400 text-[10px] font-black uppercase tracking-[0.2em]"><tr><th className="px-8 py-6">Case Ref</th><th className="px-8 py-6">Subject</th><th className="px-8 py-6">Type</th><th className="px-8 py-6">Status</th><th className="px-8 py-6 text-right pr-12">Action</th></tr></thead>
+                <thead className="bg-slate-50 border-b text-slate-400 text-[10px] font-black uppercase tracking-[0.2em]"><tr><th className="px-8 py-6">Ref</th><th className="px-8 py-6">Subject</th><th className="px-8 py-6">Type</th><th className="px-8 py-6">Status</th><th className="px-8 py-6 text-right pr-12">View</th></tr></thead>
                 <tbody className="divide-y divide-slate-100">
                   {cases.map((c) => (
                     <tr key={c.id} className="hover:bg-red-50/40 cursor-pointer" onClick={() => { setSelectedCase(c); setIsCasePanelOpen(true); }}>
@@ -227,7 +215,7 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* --- MODAL: CREATE EMPLOYEE --- */}
+        {/* MODAL: CREATE EMPLOYEE */}
         {isAddingNew && (
           <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/50 backdrop-blur-sm" onClick={() => setIsAddingNew(false)}>
             <div className="max-w-xl w-full bg-white h-full p-8 overflow-y-auto space-y-6 shadow-2xl animate-in slide-in-from-right duration-500" onClick={e => e.stopPropagation()}>
@@ -252,7 +240,7 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* --- MODAL: CREATE CASE --- */}
+        {/* MODAL: CREATE CASE */}
         {isAddingCase && (
           <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/50 backdrop-blur-sm" onClick={() => setIsAddingCase(false)}>
             <div className="max-w-xl w-full bg-white h-full p-8 overflow-y-auto space-y-6 shadow-2xl animate-in slide-in-from-right duration-500" onClick={e => e.stopPropagation()}>
@@ -281,8 +269,8 @@ export default function Dashboard() {
 
               <div className="space-y-4">
                 <label className="text-xs font-black uppercase text-slate-400 tracking-widest">Allegation</label>
-                <input className="w-full p-4 bg-slate-50 border rounded-2xl font-bold" placeholder="Summary (e.g. Unauthorized Absence)" onChange={e => setNewCaseData({...newCaseData, summary: e.target.value})} />
-                <textarea className="w-full p-4 bg-slate-50 border rounded-2xl font-bold h-32" placeholder="Detailed description..." onChange={e => setNewCaseData({...newCaseData, detailedDesc: e.target.value})} />
+                <input className="w-full p-4 bg-slate-50 border rounded-2xl font-bold" placeholder="Summary" onChange={e => setNewCaseData({...newCaseData, summary: e.target.value})} />
+                <textarea className="w-full p-4 bg-slate-50 border rounded-2xl font-bold h-32" placeholder="Description..." onChange={e => setNewCaseData({...newCaseData, detailedDesc: e.target.value})} />
               </div>
 
               <button onClick={handleCreateCase} disabled={isSaving} className="w-full py-5 bg-red-600 text-white rounded-3xl font-black uppercase tracking-widest disabled:opacity-50">{isSaving ? 'Processing...' : 'Create Case'}</button>
@@ -290,7 +278,7 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* --- SLIDE-OVER: EMPLOYEE DOSSIER --- */}
+        {/* DOSSIER: EMPLOYEE */}
         {isPanelOpen && selectedEmployee && (
           <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/50 backdrop-blur-sm" onClick={() => setIsPanelOpen(false)}>
             <div className="max-w-xl w-full bg-white h-full flex flex-col p-8 space-y-8 animate-in slide-in-from-right duration-500 shadow-2xl" onClick={e => e.stopPropagation()}>
@@ -331,11 +319,6 @@ export default function Dashboard() {
                       <input disabled={!isEditing} className="w-full bg-white p-4 rounded-2xl border outline-none font-bold" value={selectedEmployee.addressLine1 || ''} onChange={e => setSelectedEmployee({...selectedEmployee, addressLine1: e.target.value})} />
                       <input disabled={!isEditing} className="w-full bg-white p-4 rounded-2xl border outline-none font-bold" value={selectedEmployee.postcode || ''} onChange={e => setSelectedEmployee({...selectedEmployee, postcode: e.target.value})} />
                     </div>
-                    <div className="p-6 bg-slate-50 rounded-[2.5rem] border space-y-4 shadow-sm">
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><HeartPulse size={14}/> Emergency Contact</p>
-                      <input disabled={!isEditing} className="w-full bg-white p-4 rounded-2xl border outline-none font-bold" value={selectedEmployee.emergencyName || ''} onChange={e => setSelectedEmployee({...selectedEmployee, emergencyName: e.target.value})} />
-                      <input disabled={!isEditing} className="w-full bg-white p-4 rounded-2xl border outline-none font-bold" value={selectedEmployee.emergencyPhone || ''} onChange={e => setSelectedEmployee({...selectedEmployee, emergencyPhone: e.target.value})} />
-                    </div>
                   </div>
                 )}
                 {profileTab === 'Payroll' && (
@@ -359,7 +342,7 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* --- SLIDE-OVER: CASE DOSSIER --- */}
+        {/* DOSSIER: CASE */}
         {isCasePanelOpen && selectedCase && (
           <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/60 backdrop-blur-md" onClick={() => setIsCasePanelOpen(false)}>
             <div className="max-w-xl w-full bg-white h-full flex flex-col shadow-2xl animate-in slide-in-from-right duration-500" onClick={e => e.stopPropagation()}>
@@ -391,7 +374,6 @@ export default function Dashboard() {
                     </div>
                   ))}
                   
-                  {/* Add Note Input */}
                   <div className="relative pt-4">
                     <div className="absolute -left-[41px] top-5 w-6 h-6 rounded-full border-4 border-white bg-slate-900 shadow-sm" />
                     <textarea 

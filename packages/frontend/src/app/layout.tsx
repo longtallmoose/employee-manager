@@ -9,7 +9,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Vanguard HR | Workforce Operating System",
+  title: "StaffPilot | Workforce Operating System",
   description: "The ultimate UK-compliant employee management platform.",
 };
 
