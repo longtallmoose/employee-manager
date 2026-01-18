@@ -19,6 +19,7 @@ export default function Dashboard() {
   const [isEditing, setIsEditing] = useState(false);
   const [showSensitive, setShowSensitive] = useState(false);
   const [isAddingNew, setIsAddingNew] = useState(false);
+  const [isSaving, setIsSaving] = useState(false); // Added loading state
   
   const [newEmployee, setNewEmployee] = useState({ 
     firstName: '', lastName: '', jobTitle: '', department: 'OPERATIONS', 
@@ -33,10 +34,9 @@ export default function Dashboard() {
       const res = await fetch(`${API_BASE}/employees`);
       const data = await res.json();
       setEmployees(data);
-      
-      // If a panel is open, refresh the selected employee to show the new timeline entry
+      // If panel is open, refresh selected employee data to show updates immediately
       if (selectedEmployee) {
-        const updated = data.find((e: any) => e.id === selectedEmployee.id);
+        const updated = data.find((e:any) => e.id === selectedEmployee.id);
         if (updated) setSelectedEmployee(updated);
       }
     } catch (err) { console.error(err); }
@@ -46,34 +46,57 @@ export default function Dashboard() {
 
   const handleCreate = async () => {
     if (!newEmployee.firstName || !newEmployee.lastName) return alert("Required fields missing");
-    await fetch(`${API_BASE}/auth/register`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newEmployee),
-    });
-    setIsAddingNew(false);
-    fetchEmployees();
+    setIsSaving(true);
+    try {
+      const res = await fetch(`${API_BASE}/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newEmployee),
+      });
+      if (res.ok) {
+        setIsAddingNew(false);
+        setNewEmployee({ firstName: '', lastName: '', jobTitle: '', department: 'OPERATIONS', payAmount: 0, niNumber: '', addressLine1: '', postcode: '', emergencyName: '', emergencyPhone: '' });
+        fetchEmployees();
+      }
+    } catch (err) { console.error(err); }
+    setIsSaving(false);
   };
 
   const handleUpdate = async () => {
     if (!selectedEmployee) return;
-    const currentRecord = selectedEmployee.records[0];
+    setIsSaving(true);
+    
+    // We get the LATEST record to act as the current job info
+    // If we are editing, we are likely updating the fields bound to selectedEmployee.records[0]
+    const currentRecord = selectedEmployee.records[0] || {};
+
     try {
       const res = await fetch(`${API_BASE}/employees/${selectedEmployee.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...selectedEmployee,
+          firstName: selectedEmployee.firstName,
+          lastName: selectedEmployee.lastName,
+          niNumber: selectedEmployee.niNumber,
+          addressLine1: selectedEmployee.addressLine1,
+          postcode: selectedEmployee.postcode,
+          emergencyName: selectedEmployee.emergencyName,
+          emergencyPhone: selectedEmployee.emergencyPhone,
+          // Job fields come from the record array which we bind to inputs
           jobTitle: currentRecord.jobTitle,
           department: currentRecord.department,
           payAmount: currentRecord.payAmount
         }),
       });
+      
       if (res.ok) {
         setIsEditing(false);
-        await fetchEmployees(); // This will now trigger the timeline growth
+        await fetchEmployees(); // Refresh to see new timeline entry
+      } else {
+        alert("Failed to save changes");
       }
     } catch (err) { console.error(err); }
+    setIsSaving(false);
   };
 
   const handleDelete = async (id: string) => {
@@ -81,11 +104,6 @@ export default function Dashboard() {
     await fetch(`${API_BASE}/employees/${id}`, { method: 'DELETE' });
     setIsPanelOpen(false);
     fetchEmployees();
-  };
-
-  // Helper to sort records by start date (Newest First)
-  const getSortedRecords = (records: any[]) => {
-    return [...records].sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime());
   };
 
   return (
@@ -96,7 +114,7 @@ export default function Dashboard() {
           <span className="font-bold text-xl text-white tracking-tight">Vanguard HR</span>
         </div>
         <nav className="flex-1 mt-6 px-3 space-y-1">
-          <button onClick={() => setActiveTab('Employees')} className="w-full flex items-center gap-3 px-3 py-3 rounded-xl bg-blue-600 text-white shadow-lg shadow-blue-600/20">
+          <button onClick={() => setActiveTab('Employees')} className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-all ${activeTab === 'Employees' ? 'bg-blue-600 text-white shadow-lg' : 'hover:bg-slate-800'}`}>
             <Users size={20} /> <span className="font-semibold text-sm">Employees</span>
           </button>
         </nav>
@@ -113,13 +131,13 @@ export default function Dashboard() {
 
         <div className="p-8 max-w-7xl mx-auto w-full">
           <div className="flex justify-between items-end mb-10">
-            <div><h1 className="text-4xl font-black tracking-tight">Employees</h1><p className="text-slate-500">Personnel Directory</p></div>
-            <button onClick={() => setIsAddingNew(true)} className="bg-blue-600 text-white px-8 py-4 rounded-2xl font-bold shadow-xl flex items-center gap-3"><UserPlus size={20} /> Onboard Staff</button>
+            <div><h1 className="text-4xl font-black tracking-tight">{activeTab}</h1><p className="text-slate-500 font-medium">Workforce Directory</p></div>
+            <button onClick={() => setIsAddingNew(true)} className="bg-blue-600 text-white px-8 py-4 rounded-2xl font-bold shadow-xl flex items-center gap-3 transition-all active:scale-95"><UserPlus size={20} /> Onboard Staff</button>
           </div>
 
           <div className="bg-white rounded-[2rem] border shadow-sm overflow-hidden">
             <table className="w-full text-left">
-              <thead className="bg-slate-50 border-b text-slate-400 text-[10px] font-black uppercase tracking-widest"><tr><th className="px-8 py-6">Personnel</th><th className="px-8 py-6">Assignment</th><th className="px-8 py-6 text-right pr-12">Action</th></tr></thead>
+              <thead className="bg-slate-50 border-b text-slate-400 text-[10px] font-black uppercase tracking-[0.2em]"><tr><th className="px-8 py-6">Personnel</th><th className="px-8 py-6">Assignment</th><th className="px-8 py-6 text-right pr-12">Action</th></tr></thead>
               <tbody className="divide-y divide-slate-100">
                 {employees.filter(e => `${e.firstName} ${e.lastName}`.toLowerCase().includes(searchTerm.toLowerCase())).map((emp) => (
                   <tr key={emp.id} className="hover:bg-blue-50/40 cursor-pointer" onClick={() => { setSelectedEmployee(emp); setIsPanelOpen(true); setIsEditing(false); }}>
@@ -133,34 +151,44 @@ export default function Dashboard() {
           </div>
         </div>
 
+        {/* ONBOARD SCREEN */}
         {isAddingNew && (
-          <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/50 backdrop-blur-sm" onClick={() => setIsAddingNew(false)}>
+          <div className="fixed inset-0 z-50 overflow-hidden flex justify-end bg-slate-900/50 backdrop-blur-sm" onClick={() => setIsAddingNew(false)}>
             <div className="max-w-xl w-full bg-white h-full flex flex-col p-8 space-y-6 overflow-y-auto animate-in slide-in-from-right duration-500 shadow-2xl" onClick={e => e.stopPropagation()}>
               <div className="flex justify-between items-center"><h3 className="text-2xl font-black">New Hire</h3><button onClick={() => setIsAddingNew(false)}><X size={28}/></button></div>
               <div className="space-y-4">
                 <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Personal</p>
                 <div className="grid grid-cols-2 gap-4">
-                  <input className="p-4 bg-slate-50 border rounded-2xl font-bold" placeholder="First Name" onChange={e => setNewEmployee({...newEmployee, firstName: e.target.value})} />
-                  <input className="p-4 bg-slate-50 border rounded-2xl font-bold" placeholder="Last Name" onChange={e => setNewEmployee({...newEmployee, lastName: e.target.value})} />
+                  <input className="p-4 bg-slate-50 border rounded-2xl font-bold" placeholder="First Name" value={newEmployee.firstName} onChange={e => setNewEmployee({...newEmployee, firstName: e.target.value})} />
+                  <input className="p-4 bg-slate-50 border rounded-2xl font-bold" placeholder="Last Name" value={newEmployee.lastName} onChange={e => setNewEmployee({...newEmployee, lastName: e.target.value})} />
                 </div>
-                <input className="w-full p-4 bg-slate-50 border rounded-2xl font-bold" placeholder="NI Number" onChange={e => setNewEmployee({...newEmployee, niNumber: e.target.value})} />
-                <input className="w-full p-4 bg-slate-50 border rounded-2xl font-bold" placeholder="Address" onChange={e => setNewEmployee({...newEmployee, addressLine1: e.target.value})} />
+                <input className="w-full p-4 bg-slate-50 border rounded-2xl font-bold" placeholder="NI Number" value={newEmployee.niNumber} onChange={e => setNewEmployee({...newEmployee, niNumber: e.target.value})} />
+                <input className="w-full p-4 bg-slate-50 border rounded-2xl font-bold" placeholder="Address" value={newEmployee.addressLine1} onChange={e => setNewEmployee({...newEmployee, addressLine1: e.target.value})} />
+                <input className="w-full p-4 bg-slate-50 border rounded-2xl font-bold" placeholder="Postcode" value={newEmployee.postcode} onChange={e => setNewEmployee({...newEmployee, postcode: e.target.value})} />
+              </div>
+              <div className="space-y-4">
+                <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Next of Kin</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <input className="p-4 bg-slate-50 border rounded-2xl font-bold" placeholder="Contact Name" value={newEmployee.emergencyName} onChange={e => setNewEmployee({...newEmployee, emergencyName: e.target.value})} />
+                  <input className="p-4 bg-slate-50 border rounded-2xl font-bold" placeholder="Phone" value={newEmployee.emergencyPhone} onChange={e => setNewEmployee({...newEmployee, emergencyPhone: e.target.value})} />
+                </div>
               </div>
               <div className="space-y-4">
                 <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Job & Pay</p>
-                <input className="w-full p-4 bg-slate-50 border rounded-2xl font-bold" placeholder="Job Title" onChange={e => setNewEmployee({...newEmployee, jobTitle: e.target.value})} />
+                <input className="w-full p-4 bg-slate-50 border rounded-2xl font-bold" placeholder="Job Title" value={newEmployee.jobTitle} onChange={e => setNewEmployee({...newEmployee, jobTitle: e.target.value})} />
                 <div className="grid grid-cols-2 gap-4">
-                  <select className="p-4 bg-slate-50 border rounded-2xl font-bold" onChange={e => setNewEmployee({...newEmployee, department: e.target.value})}>
+                  <select className="p-4 bg-slate-50 border rounded-2xl font-bold" value={newEmployee.department} onChange={e => setNewEmployee({...newEmployee, department: e.target.value})}>
                     <option value="OPERATIONS">OPERATIONS</option><option value="HR">HR</option><option value="FINANCE">FINANCE</option>
                   </select>
-                  <input type="number" className="p-4 bg-slate-50 border rounded-2xl font-bold" placeholder="Salary (£)" onChange={e => setNewEmployee({...newEmployee, payAmount: Number(e.target.value)})} />
+                  <input type="number" className="p-4 bg-slate-50 border rounded-2xl font-bold" placeholder="Salary (£)" value={newEmployee.payAmount} onChange={e => setNewEmployee({...newEmployee, payAmount: Number(e.target.value)})} />
                 </div>
               </div>
-              <button onClick={handleCreate} className="w-full py-5 bg-blue-600 text-white rounded-3xl font-black uppercase tracking-widest">Onboard Personnel</button>
+              <button onClick={handleCreate} disabled={isSaving} className="w-full py-5 bg-blue-600 text-white rounded-3xl font-black uppercase tracking-widest disabled:opacity-50">{isSaving ? 'Saving...' : 'Onboard Personnel'}</button>
             </div>
           </div>
         )}
 
+        {/* PROFILE/EDIT PANEL */}
         {isPanelOpen && selectedEmployee && (
           <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/50 backdrop-blur-sm" onClick={() => setIsPanelOpen(false)}>
             <div className="max-w-xl w-full bg-white h-full flex flex-col p-8 space-y-8 animate-in slide-in-from-right duration-500 shadow-2xl" onClick={e => e.stopPropagation()}>
@@ -196,7 +224,7 @@ export default function Dashboard() {
                     <div className="space-y-4">
                       <h4 className="font-black text-xs uppercase tracking-widest flex items-center gap-2"><History size={18}/> Service History</h4>
                       <div className="space-y-6 border-l-4 border-slate-100 ml-2 pl-8 relative">
-                        {getSortedRecords(selectedEmployee.records).map((rec: any, idx: number) => (
+                        {selectedEmployee.records.map((rec: any, idx: number) => (
                           <div key={rec.id} className="relative py-2">
                             <div className={`absolute -left-[40px] top-4 w-6 h-6 rounded-full border-4 border-white shadow-sm ${idx === 0 ? 'bg-blue-600' : 'bg-slate-300'}`} />
                             <p className="font-black text-slate-900 text-lg">{rec.jobTitle}</p>
@@ -210,14 +238,51 @@ export default function Dashboard() {
                     </div>
                   </div>
                 )}
-                {/* Personal and Payroll tabs remain unchanged from previous high-fidelity version */}
+
+                {profileTab === 'Personal' && (
+                  <div className="space-y-6">
+                    <div className="p-6 bg-slate-50 rounded-[2.5rem] border space-y-4 shadow-sm">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><MapPin size={14}/> Residence</p>
+                      <input disabled={!isEditing} className="w-full bg-white p-4 rounded-2xl border outline-none font-bold" value={selectedEmployee.addressLine1 || ''} onChange={e => setSelectedEmployee({...selectedEmployee, addressLine1: e.target.value})} />
+                      <input disabled={!isEditing} className="w-full bg-white p-4 rounded-2xl border outline-none font-bold" value={selectedEmployee.postcode || ''} onChange={e => setSelectedEmployee({...selectedEmployee, postcode: e.target.value})} />
+                    </div>
+                    <div className="p-6 bg-slate-50 rounded-[2.5rem] border space-y-4 shadow-sm">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><HeartPulse size={14}/> Emergency Contact</p>
+                      <input disabled={!isEditing} className="w-full bg-white p-4 rounded-2xl border outline-none font-bold" placeholder="Name" value={selectedEmployee.emergencyName || ''} onChange={e => setSelectedEmployee({...selectedEmployee, emergencyName: e.target.value})} />
+                      <input disabled={!isEditing} className="w-full bg-white p-4 rounded-2xl border outline-none font-bold" placeholder="Phone" value={selectedEmployee.emergencyPhone || ''} onChange={e => setSelectedEmployee({...selectedEmployee, emergencyPhone: e.target.value})} />
+                    </div>
+                  </div>
+                )}
+
+                {profileTab === 'Payroll' && (
+                  <div className="space-y-6">
+                    <div className="p-8 bg-slate-900 rounded-[2.5rem] text-white space-y-6 shadow-2xl relative">
+                      <div className="flex justify-between items-center"><h4 className="text-[10px] font-black uppercase text-slate-400">UK Compliance</h4><button onClick={() => setShowSensitive(!showSensitive)} className="text-[10px] font-bold bg-white/20 px-4 py-2 rounded-full">{showSensitive ? 'HIDE' : 'SHOW'}</button></div>
+                      <div className="space-y-2">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">National Insurance</p>
+                        <input disabled={!isEditing} type={showSensitive || isEditing ? "text" : "password"} className="bg-transparent text-2xl font-mono font-black outline-none w-full" value={selectedEmployee.niNumber || ''} onChange={e => setSelectedEmployee({...selectedEmployee, niNumber: e.target.value})} />
+                      </div>
+                      <div className="pt-6 border-t border-white/10 flex justify-between">
+                        <div>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase">Annual Salary</p>
+                          <div className="flex items-center gap-1 text-xl font-black">
+                            <span>£</span>
+                            <input disabled={!isEditing} className="bg-transparent outline-none" value={selectedEmployee.records[0]?.payAmount} onChange={e => {
+                               const r = [...selectedEmployee.records]; r[0].payAmount = Number(e.target.value); setSelectedEmployee({...selectedEmployee, records: r})
+                            }} />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="p-8 border-t bg-slate-50 grid grid-cols-2 gap-4">
                 {isEditing ? (
-                  <><button onClick={() => setIsEditing(false)} className="py-4 bg-white border rounded-2xl font-black uppercase text-xs tracking-widest">Discard</button><button onClick={handleUpdate} className="py-4 bg-blue-600 text-white rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl flex items-center justify-center gap-2"><Save size={16}/> Save Changes</button></>
+                  <><button onClick={() => setIsEditing(false)} className="py-4 bg-white border rounded-2xl font-black uppercase text-xs tracking-widest">Discard</button><button onClick={handleUpdate} disabled={isSaving} className="py-4 bg-blue-600 text-white rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl flex items-center justify-center gap-2 disabled:opacity-50"><Save size={16}/> {isSaving ? 'Saving...' : 'Save Changes'}</button></>
                 ) : (
-                  <><button onClick={() => handleDelete(selectedEmployee.id)} className="py-4 bg-red-50 text-red-600 rounded-2xl font-black uppercase text-xs tracking-widest flex items-center justify-center gap-2 transition-all hover:bg-red-100"><Trash2 size={16}/> Terminate</button><button onClick={() => setIsEditing(true)} className="py-4 bg-slate-900 text-white rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl flex items-center justify-center gap-2 active:scale-95 transition-all"><Edit3 size={16}/> Edit Dossier</button></>
+                  <><button onClick={() => handleDelete(selectedEmployee.id)} className="py-4 bg-red-50 text-red-600 rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-red-100"><Trash2 size={16}/> Terminate</button><button onClick={() => setIsEditing(true)} className="py-4 bg-slate-900 text-white rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl flex items-center justify-center gap-2"><Edit3 size={16}/> Edit Dossier</button></>
                 )}
               </div>
             </div>
