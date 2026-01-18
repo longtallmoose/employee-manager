@@ -26,22 +26,29 @@ app.get('/', (req, res) => {
   res.send('Employee Platform API is Active 🚀');
 });
 
+// 2. UPDATE AN EMPLOYEE (The "Save" button logic)
 app.put('/api/employees/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const { firstName, lastName, role } = req.body;
+
+    console.log(`Update request received for ID: ${id}`, req.body);
 
     const updatedEmployee = await db.employee.update({
       where: { id },
       data: {
         firstName,
         lastName,
-        role: role as any, // <--- THIS 'as any' IS THE FIX
+        // @ts-ignore - Ignore strict type checking for the Enum role
+        role: role, 
       },
     });
+
+    console.log('Successfully updated database for:', updatedEmployee.id);
     res.json(updatedEmployee);
   } catch (error) {
-    res.status(500).json({ error: 'Failed to update' });
+    console.error('Database update error:', error);
+    res.status(500).json({ error: 'Failed to update employee' });
   }
 });
 
