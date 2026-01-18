@@ -1,21 +1,16 @@
 // packages/backend/src/server.ts
 import express from 'express';
 import cors from 'cors';
-import { AuthService } from './services/auth-service';
 import { db } from './lib/db';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import dotenv from 'dotenv';
 
-// Load environment variables
 dotenv.config();
 
 const app = express();
-
-// Use the port Render gives us, or fallback to 4000 locally
 const PORT = process.env.PORT || 4000;
 
-// Middleware - Configured for your specific frontend URL
 app.use(cors({
   origin: process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(',') : '*',
   credentials: true
@@ -24,127 +19,151 @@ app.use(express.json());
 
 // --- ROUTES ---
 
-// 1. Health Check
 app.get('/', (req, res) => {
-  res.send('Vanguard HR Platform API is Active 🚀');
+  res.send('Vanguard HR Engine: Active 🚀');
 });
 
-// 2. UPDATE AN EMPLOYEE
+// 1. REGISTER NEW STAFF (Atomic Transaction: User + Employee + First Record)
+app.post('/api/auth/register', async (req, res) => {
+  try {
+    const { email, password, firstName, lastName, role, jobTitle, department, payAmount } = req.body;
+
+    const result = await db.$transaction(async (tx) => {
+      const hashedPassword = await bcrypt.hash(password, 10);
+      
+      const user = await tx.user.create({
+        data: {
+          email,
+          passwordHash: hashedPassword,
+          role: role || 'EMPLOYEE',
+        },
+      });
+
+      const employee = await tx.employee.create({
+        data: {
+          userId: user.id,
+          firstName,
+          lastName,
+          records: {
+            create: {
+              jobTitle: jobTitle || 'New Starter',
+              department: department || 'OPERATIONS',
+              location: 'Head Office',
+              payAmount: payAmount || 0,
+              startDate: new Date(),
+              employmentType: 'FULL_TIME',
+              payBasis: 'SALARIED',
+              hoursPerWeek: 37.5,
+              changeReason: 'Initial Hire'
+            }
+          }
+        },
+        include: { records: true }
+      });
+
+      return employee;
+    });
+
+    res.status(201).json({ success: true, data: result });
+  } catch (error) {
+    console.error('Registration Error:', error);
+    res.status(500).json({ success: false, message: 'Failed to create versioned staff record' });
+  }
+});
+
+// 2. UPDATE EMPLOYEE (Versioned logic - Closes old record, opens new one)
 app.put('/api/employees/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { firstName, lastName, role } = req.body;
+    const { firstName, lastName, jobTitle, department, payAmount, changeReason } = req.body;
 
-    console.log(`Update request for ID: ${id}`);
+    const result = await db.$transaction(async (tx) => {
+      // Update basic details
+      const employee = await tx.employee.update({
+        where: { id },
+        data: { firstName, lastName }
+      });
 
-    const updatedEmployee = await db.employee.update({
-      where: { id },
-      data: {
-        firstName,
-        lastName,
-        // @ts-ignore - Bypass Enum check for rapid UK role updates
-        role: role, 
-      },
+      // Close current active record
+      await tx.employmentRecord.updateMany({
+        where: { employeeId: id, endDate: null },
+        data: { endDate: new Date() }
+      });
+
+      // Create new historical record
+      const newRecord = await tx.employmentRecord.create({
+        data: {
+          employeeId: id,
+          jobTitle: jobTitle || 'Updated Role',
+          department: department || 'OPERATIONS',
+          location: 'Head Office',
+          payAmount: payAmount || 0,
+          startDate: new Date(),
+          changeReason: changeReason || 'Role/Salary Adjustment',
+        }
+      });
+
+      return { employee, newRecord };
     });
 
-    res.json(updatedEmployee);
+    res.json(result);
   } catch (error) {
-    console.error('Database update error:', error);
-    res.status(500).json({ error: 'Failed to update employee' });
+    console.error('Update Error:', error);
+    res.status(500).json({ error: 'Failed to update versioned record' });
   }
 });
 
-// 3. Registration Endpoint
-app.post('/api/auth/register', async (req, res) => {
-  try {
-    const { email, password, firstName, lastName, role } = req.body;
-
-    if (!email || !password || !firstName || !lastName) {
-      return res.status(400).json({ success: false, message: 'Missing fields' });
-    }
-
-    const result = await AuthService.register({
-      email,
-      password,
-      firstName,
-      lastName,
-      role: role || 'EMPLOYEE',
-    });
-
-    if (!result.success) {
-      return res.status(400).json(result);
-    }
-
-    return res.status(201).json(result);
-  } catch (error) {
-    console.error('Registration error:', error);
-    res.status(500).json({ success: false, message: 'Internal server error' });
-  }
-});
-
-// 4. GET ALL EMPLOYEES
+// 3. GET ALL EMPLOYEES (Including current active record)
 app.get('/api/employees', async (req, res) => {
   try {
     const employees = await db.employee.findMany({
+      include: {
+        records: {
+          where: { endDate: null },
+          take: 1
+        }
+      },
       orderBy: { createdAt: 'desc' }
     });
     res.json(employees);
   } catch (error) {
-    console.error('Fetch error:', error);
     res.status(500).json({ error: 'Failed to fetch employees' });
   }
 });
 
-// 5. DELETE AN EMPLOYEE
-app.delete('/api/employees/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    await db.employee.delete({
-      where: { id },
-    });
-    res.json({ success: true });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to delete employee' });
-  }
-});
-
-// 6. LOGIN ROUTE
+// 4. LOGIN
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
-
-    const user = await db.user.findUnique({
-      where: { email },
-    });
-
-    if (!user) {
-      return res.status(400).json({ error: 'User not found' });
-    }
+    const user = await db.user.findUnique({ where: { email } });
+    if (!user) return res.status(400).json({ error: 'User not found' });
 
     const isValid = await bcrypt.compare(password, user.passwordHash);
-    
-    if (!isValid) {
-      return res.status(400).json({ error: 'Invalid password' });
-    }
+    if (!isValid) return res.status(400).json({ error: 'Invalid password' });
 
-    // Pull secret from .env for security
-    const secret = process.env.JWT_SECRET || 'fallback_super_secret';
-    
     const token = jwt.sign(
-      { userId: user.id, email: user.email },
-      secret, 
-      { expiresIn: '1h' }
+      { userId: user.id, email: user.email, role: user.role },
+      process.env.JWT_SECRET || 'fallback_secret',
+      { expiresIn: '8h' }
     );
 
-    res.json({ token, user: { email: user.email } });
-
+    res.json({ token, user: { email: user.email, role: user.role } });
   } catch (error) {
-    console.error('Login error:', error);
     res.status(500).json({ error: 'Login failed' });
   }
 });
 
-// --- START SERVER ---
+// 5. DELETE
+app.delete('/api/employees/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await db.employee.delete({ where: { id } });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete record' });
+  }
+});
+
 app.listen(PORT, () => {
-  console.log(`\n⚡️ Vanguard HR Server is running on port ${PORT}`);
+  console.log(`\n🚀 Vanguard HR Engine: Listening on port ${PORT}`);
 });
