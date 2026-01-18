@@ -19,7 +19,7 @@ export default function Dashboard() {
   const [isEditing, setIsEditing] = useState(false);
   const [showSensitive, setShowSensitive] = useState(false);
   const [isAddingNew, setIsAddingNew] = useState(false);
-  const [isSaving, setIsSaving] = useState(false); // Added loading state
+  const [isSaving, setIsSaving] = useState(false);
   
   const [newEmployee, setNewEmployee] = useState({ 
     firstName: '', lastName: '', jobTitle: '', department: 'OPERATIONS', 
@@ -34,7 +34,6 @@ export default function Dashboard() {
       const res = await fetch(`${API_BASE}/employees`);
       const data = await res.json();
       setEmployees(data);
-      // If panel is open, refresh selected employee data to show updates immediately
       if (selectedEmployee) {
         const updated = data.find((e:any) => e.id === selectedEmployee.id);
         if (updated) setSelectedEmployee(updated);
@@ -66,8 +65,7 @@ export default function Dashboard() {
     if (!selectedEmployee) return;
     setIsSaving(true);
     
-    // We get the LATEST record to act as the current job info
-    // If we are editing, we are likely updating the fields bound to selectedEmployee.records[0]
+    // Safety check to ensure we have a record to read from
     const currentRecord = selectedEmployee.records[0] || {};
 
     try {
@@ -82,7 +80,6 @@ export default function Dashboard() {
           postcode: selectedEmployee.postcode,
           emergencyName: selectedEmployee.emergencyName,
           emergencyPhone: selectedEmployee.emergencyPhone,
-          // Job fields come from the record array which we bind to inputs
           jobTitle: currentRecord.jobTitle,
           department: currentRecord.department,
           payAmount: currentRecord.payAmount
@@ -91,7 +88,7 @@ export default function Dashboard() {
       
       if (res.ok) {
         setIsEditing(false);
-        await fetchEmployees(); // Refresh to see new timeline entry
+        await fetchEmployees();
       } else {
         alert("Failed to save changes");
       }
@@ -104,6 +101,27 @@ export default function Dashboard() {
     await fetch(`${API_BASE}/employees/${id}`, { method: 'DELETE' });
     setIsPanelOpen(false);
     fetchEmployees();
+  };
+
+  // Helper to safely update nested record state
+  const updateRecordField = (field: string, value: any) => {
+    if (!selectedEmployee || !selectedEmployee.records) return;
+    
+    // Create a deep copy of the records array to trigger React re-render
+    const updatedRecords = selectedEmployee.records.map((rec: any, index: number) => {
+      if (index === 0) { // Only update the active (first) record
+        return { ...rec, [field]: value };
+      }
+      return rec;
+    });
+
+    setSelectedEmployee({ ...selectedEmployee, records: updatedRecords });
+  };
+
+  // Helper to sort records by start date (Newest First)
+  const getSortedRecords = (records: any[]) => {
+    if (!records) return [];
+    return [...records].sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime());
   };
 
   return (
@@ -167,18 +185,11 @@ export default function Dashboard() {
                 <input className="w-full p-4 bg-slate-50 border rounded-2xl font-bold" placeholder="Postcode" value={newEmployee.postcode} onChange={e => setNewEmployee({...newEmployee, postcode: e.target.value})} />
               </div>
               <div className="space-y-4">
-                <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Next of Kin</p>
-                <div className="grid grid-cols-2 gap-4">
-                  <input className="p-4 bg-slate-50 border rounded-2xl font-bold" placeholder="Contact Name" value={newEmployee.emergencyName} onChange={e => setNewEmployee({...newEmployee, emergencyName: e.target.value})} />
-                  <input className="p-4 bg-slate-50 border rounded-2xl font-bold" placeholder="Phone" value={newEmployee.emergencyPhone} onChange={e => setNewEmployee({...newEmployee, emergencyPhone: e.target.value})} />
-                </div>
-              </div>
-              <div className="space-y-4">
                 <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Job & Pay</p>
                 <input className="w-full p-4 bg-slate-50 border rounded-2xl font-bold" placeholder="Job Title" value={newEmployee.jobTitle} onChange={e => setNewEmployee({...newEmployee, jobTitle: e.target.value})} />
                 <div className="grid grid-cols-2 gap-4">
                   <select className="p-4 bg-slate-50 border rounded-2xl font-bold" value={newEmployee.department} onChange={e => setNewEmployee({...newEmployee, department: e.target.value})}>
-                    <option value="OPERATIONS">OPERATIONS</option><option value="HR">HR</option><option value="FINANCE">FINANCE</option>
+                    <option value="OPERATIONS">OPERATIONS</option><option value="HR">HR</option><option value="FINANCE">FINANCE</option><option value="LEGAL">LEGAL</option>
                   </select>
                   <input type="number" className="p-4 bg-slate-50 border rounded-2xl font-bold" placeholder="Salary (£)" value={newEmployee.payAmount} onChange={e => setNewEmployee({...newEmployee, payAmount: Number(e.target.value)})} />
                 </div>
@@ -207,16 +218,12 @@ export default function Dashboard() {
                     <div className="grid grid-cols-2 gap-4">
                       <div className="p-6 bg-slate-50 rounded-3xl border space-y-2">
                         <p className="text-[10px] font-black text-slate-400 uppercase">Position</p>
-                        <input disabled={!isEditing} className="bg-transparent font-black text-lg outline-none w-full" value={selectedEmployee.records[0]?.jobTitle} onChange={e => {
-                          const r = [...selectedEmployee.records]; r[0].jobTitle = e.target.value; setSelectedEmployee({...selectedEmployee, records: r})
-                        }} />
+                        <input disabled={!isEditing} className="bg-transparent font-black text-lg outline-none w-full" value={selectedEmployee.records[0]?.jobTitle} onChange={e => updateRecordField('jobTitle', e.target.value)} />
                       </div>
                       <div className="p-6 bg-slate-50 rounded-3xl border space-y-2">
                         <p className="text-[10px] font-black text-slate-400 uppercase">Department</p>
-                        <select disabled={!isEditing} className="bg-transparent font-black text-lg outline-none w-full" value={selectedEmployee.records[0]?.department} onChange={e => {
-                          const r = [...selectedEmployee.records]; r[0].department = e.target.value; setSelectedEmployee({...selectedEmployee, records: r})
-                        }}>
-                          <option value="OPERATIONS">OPERATIONS</option><option value="HR">HR</option><option value="FINANCE">FINANCE</option>
+                        <select disabled={!isEditing} className="bg-transparent font-black text-lg outline-none w-full" value={selectedEmployee.records[0]?.department} onChange={e => updateRecordField('department', e.target.value)}>
+                          <option value="OPERATIONS">OPERATIONS</option><option value="HR">HR</option><option value="FINANCE">FINANCE</option><option value="LEGAL">LEGAL</option>
                         </select>
                       </div>
                     </div>
@@ -224,7 +231,7 @@ export default function Dashboard() {
                     <div className="space-y-4">
                       <h4 className="font-black text-xs uppercase tracking-widest flex items-center gap-2"><History size={18}/> Service History</h4>
                       <div className="space-y-6 border-l-4 border-slate-100 ml-2 pl-8 relative">
-                        {selectedEmployee.records.map((rec: any, idx: number) => (
+                        {getSortedRecords(selectedEmployee.records).map((rec: any, idx: number) => (
                           <div key={rec.id} className="relative py-2">
                             <div className={`absolute -left-[40px] top-4 w-6 h-6 rounded-full border-4 border-white shadow-sm ${idx === 0 ? 'bg-blue-600' : 'bg-slate-300'}`} />
                             <p className="font-black text-slate-900 text-lg">{rec.jobTitle}</p>
@@ -267,9 +274,7 @@ export default function Dashboard() {
                           <p className="text-[10px] font-bold text-slate-400 uppercase">Annual Salary</p>
                           <div className="flex items-center gap-1 text-xl font-black">
                             <span>£</span>
-                            <input disabled={!isEditing} className="bg-transparent outline-none" value={selectedEmployee.records[0]?.payAmount} onChange={e => {
-                               const r = [...selectedEmployee.records]; r[0].payAmount = Number(e.target.value); setSelectedEmployee({...selectedEmployee, records: r})
-                            }} />
+                            <input disabled={!isEditing} className="bg-transparent outline-none" value={selectedEmployee.records[0]?.payAmount} onChange={e => updateRecordField('payAmount', Number(e.target.value))} />
                           </div>
                         </div>
                       </div>
