@@ -100,14 +100,34 @@ app.post('/api/auth/register', async (req, res) => {
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
-    const user = await db.user.findUnique({ where: { email } });
+    
+    // FIX: Fetch user AND their employee record to get the employeeId
+    const user = await db.user.findUnique({ 
+      where: { email },
+      include: { employee: true } // <--- CRITICAL for iOS App
+    });
+
     if (user && await bcrypt.compare(password, user.passwordHash)) {
       const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET || 'secret');
-      res.json({ token });
+      
+      // FIX: Return the full user object along with the token
+      res.json({ 
+        token,
+        user: {
+          id: user.id,
+          email: user.email,
+          role: user.role,
+          // This ensures the iOS app can link the user to their profile
+          employeeId: user.employee ? user.employee.id : null
+        }
+      });
     } else {
       res.status(401).json({ error: 'Unauthorized' });
     }
-  } catch (error) { res.status(500).json({ error: 'Login error' }); }
+  } catch (error) { 
+    console.error("Login Error:", error); 
+    res.status(500).json({ error: 'Login error' }); 
+  }
 });
 
 app.get('/api/auth/me', authenticate, async (req: any, res: any) => {
