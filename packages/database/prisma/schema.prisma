@@ -5,8 +5,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  // The 'url' line is REMOVED here. 
-  // We now pass the URL directly in the code (create-admin.ts / server.ts).
+  // url line is REMOVED for Prisma 7 compatibility
 }
 
 enum UserRole {
@@ -20,29 +19,277 @@ enum UserRole {
   EMPLOYEE
 }
 
+enum EmploymentType {
+  FULL_TIME
+  PART_TIME
+  ZERO_HOURS
+  CONTRACTOR
+  FREELANCE
+  APPRENTICE
+}
+
+enum PayBasis {
+  SALARIED
+  HOURLY
+  DAY_RATE
+}
+
+enum LeaveType {
+  ANNUAL_LEAVE
+  SICKNESS_SELF_CERT
+  SICKNESS_DOCTOR_CERT
+  TOIL
+  UNPAID
+  MATERNITY
+  PATERNITY
+  ADOPTION
+  BEREAVEMENT
+  JURY_SERVICE
+  TRAINING
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+  REQUIRES_INFO
+}
+
+enum RightToWorkStatus {
+  BRITISH_CITIZEN
+  SETTLED_STATUS
+  VISA_TIER_2
+  VISA_STUDENT
+  VISA_SPOUSAL
+  PENDING_CHECK
+}
+
+enum CaseType {
+  DISCIPLINARY
+  GRIEVANCE
+  CAPABILITY_PERFORMANCE
+  SAFEGUARDING
+  WHISTLEBLOWING
+}
+
+enum CaseStage {
+  INTAKE
+  INVESTIGATION
+  HEARING
+  OUTCOME
+  APPEAL
+  CLOSED
+}
+
+enum DocumentCategory {
+  CONTRACT
+  ID_PROOF
+  PAYSLIP
+  POLICY_ACK
+  CERTIFICATION
+  MEDICAL_NOTE
+  CASE_EVIDENCE
+}
+
 model User {
-  id            String    @id @default(cuid())
-  email         String    @unique
-  passwordHash  String    // Correct: Matches your DB and Server
-  firstName     String?
-  lastName      String?
-  role          UserRole  @default(EMPLOYEE)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  
-  employee      Employee?
+  id                  String    @id @default(cuid())
+  email               String    @unique
+  passwordHash        String
+  mfaEnabled          Boolean   @default(false)
+  mfaSecret           String?
+  failedLoginAttempts Int       @default(0)
+  lockedUntil         DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  role                UserRole  @default(EMPLOYEE) 
+  firstName           String?
+  lastName            String?
+  employee            Employee?
+  auditLogs           AuditLog[]
 }
 
 model Employee {
-  id            String    @id @default(cuid())
-  userId        String    @unique
-  user          User      @relation(fields: [userId], references: [id])
-  firstName     String
-  lastName      String
-  dateOfBirth   DateTime?
-  startDate     DateTime  @default(now())
-  jobTitle      String?
-  department    String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id              String             @id @default(cuid())
+  userId          String             @unique
+  user            User               @relation(fields: [userId], references: [id])
+  firstName       String
+  lastName        String
+  preferredName   String?
+  dateOfBirth     DateTime?
+  niNumber        String?
+  phoneNumber     String?
+  addressLine1    String?            // Made optional to prevent register crashes
+  addressLine2    String?
+  city            String?            // Made optional
+  postcode        String?            // Made optional
+  country         String             @default("UK")
+  emergencyName   String?
+  emergencyRel    String?
+  emergencyPhone  String?
+  avatarUrl       String?
+  isActive        Boolean            @default(true)
+  managerId       String?
+  manager         Employee?          @relation("ManagerSubordinates", fields: [managerId], references: [id])
+  subordinates    Employee[]         @relation("ManagerSubordinates")
+  startDate       DateTime           @default(now())
+  jobTitle        String?
+  department      String?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  records         EmploymentRecord[]
+  bankDetails     BankDetails?
+  leaveRequests   LeaveRequest[]
+  shifts          Shift[]
+  casesInvolved   CaseInvolvedParty[]
+  documents       Document[]
+  training        EmployeeTraining[]
+}
+
+model EmploymentRecord {
+  id              String          @id @default(cuid())
+  employeeId      String
+  employee        Employee        @relation(fields: [employeeId], references: [id])
+  startDate       DateTime
+  endDate         DateTime?
+  jobTitle        String
+  department      String
+  location        String
+  employmentType  EmploymentType
+  payBasis        PayBasis
+  payAmount       Decimal         @db.Decimal(10, 2)
+  currency        String          @default("GBP")
+  hoursPerWeek    Decimal         @db.Decimal(4, 2)
+  contractUrl     String?
+  changeReason    String?
+  changedBy       String
+  createdAt       DateTime        @default(now())
+}
+
+model BankDetails {
+  id            String   @id @default(cuid())
+  employeeId    String   @unique
+  employee      Employee @relation(fields: [employeeId], references: [id])
+  accountName   String
+  sortCode      String
+  accountNumber String
+  bankName      String?
+  updatedAt     DateTime @updatedAt
+}
+
+model LeaveRequest {
+  id              String         @id @default(cuid())
+  employeeId      String
+  employee        Employee       @relation(fields: [employeeId], references: [id])
+  type            LeaveType
+  startDate       DateTime
+  endDate         DateTime
+  isHalfDay       Boolean        @default(false)
+  totalDays       Decimal        @db.Decimal(4, 1)
+  status          ApprovalStatus @default(PENDING)
+  managerNote     String?
+  rejectionReason String?
+  approvedById    String?
+  approvedAt      DateTime?
+  documentId      String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+}
+
+model Shift {
+  id           String    @id @default(cuid())
+  employeeId   String
+  employee     Employee  @relation(fields: [employeeId], references: [id])
+  startTime    DateTime
+  endTime      DateTime
+  breakMinutes Int       @default(0)
+  locationId   String
+  roleRequired String?
+  isPublished  Boolean   @default(false)
+  isOpenShift  Boolean   @default(false)
+  actualStart  DateTime?
+  actualEnd    DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model HRCase {
+  id           String              @id @default(cuid())
+  reference    String              @unique
+  type         CaseType
+  summary      String
+  detailedDesc String
+  status       CaseStage
+  riskLevel    String
+  openedAt     DateTime            @default(now())
+  closedAt     DateTime?
+  leadHrUserId String
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  involvedParties CaseInvolvedParty[]
+  timeline        CaseTimelineEvent[]
+  documents       Document[]
+}
+
+model CaseInvolvedParty {
+  id         String   @id @default(cuid())
+  caseId     String
+  case       HRCase   @relation(fields: [caseId], references: [id])
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id])
+  role       String   
+}
+
+model CaseTimelineEvent {
+  id             String    @id @default(cuid())
+  caseId         String
+  case           HRCase    @relation(fields: [caseId], references: [id])
+  stage          CaseStage
+  title          String
+  description    String?
+  occurredAt     DateTime
+  loggedByUserId String
+}
+
+model Document {
+  id         String           @id @default(cuid())
+  employeeId String?
+  employee   Employee?        @relation(fields: [employeeId], references: [id])
+  caseId     String?
+  case       HRCase?          @relation(fields: [caseId], references: [id])
+  title      String
+  category   DocumentCategory
+  storageUrl String
+  mimeType   String
+  sizeBytes  Int
+  uploadedBy String
+  expiryDate DateTime?
+  createdAt  DateTime         @default(now())
+}
+
+model EmployeeTraining {
+  id             String    @id @default(cuid())
+  employeeId     String
+  employee       Employee  @relation(fields: [employeeId], references: [id])
+  name           String
+  provider       String?
+  completedAt    DateTime
+  expiresAt      DateTime?
+  certificateUrl String?
+  createdAt      DateTime  @default(now())
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id])
+  action     String
+  entityType String
+  entityId   String
+  oldValue   Json?
+  newValue   Json?
+  ipAddress  String?
+  userAgent  String?
+  timestamp  DateTime @default(now())
 }

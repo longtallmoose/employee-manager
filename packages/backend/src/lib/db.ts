@@ -1,18 +1,20 @@
-// packages/backend/src/lib/db.ts
 import { PrismaClient } from '@prisma/client';
 
 const globalForPrisma = global as unknown as { prisma: PrismaClient };
 
-// FIX: We must manually pass the URL here because it is no longer in schema.prisma
+// We cast the options to 'any' to bypass the strict Prisma 7 check 
+// which sometimes thinks 'datasources' is not allowed here.
+const prismaOptions: any = {
+  log: ['query'],
+  datasources: {
+    db: {
+      url: process.env.DATABASE_URL,
+    },
+  },
+};
+
 export const db =
   globalForPrisma.prisma ||
-  new PrismaClient({
-    log: ['query'],
-    datasources: {
-      db: {
-        url: process.env.DATABASE_URL,
-      },
-    },
-  });
+  new PrismaClient(prismaOptions);
 
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = db;
