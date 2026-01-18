@@ -1,11 +1,12 @@
 generator client {
   provider = "prisma-client-js"
-  engineType = "library"  // <--- THIS FIXES THE "URL NOT SUPPORTED" ERROR
+  engineType = "library"
 }
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  // The 'url' line is REMOVED here. 
+  // We now pass the URL directly in the code (create-admin.ts / server.ts).
 }
 
 enum UserRole {
@@ -22,7 +23,7 @@ enum UserRole {
 model User {
   id            String    @id @default(cuid())
   email         String    @unique
-  password      String    // <--- This is vital
+  passwordHash  String    // Correct: Matches your DB and Server
   firstName     String?
   lastName      String?
   role          UserRole  @default(EMPLOYEE)
