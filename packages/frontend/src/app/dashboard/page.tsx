@@ -8,34 +8,13 @@ import {
   Phone, CreditCard, HeartPulse, Save, Edit3, UserPlus
 } from 'lucide-react';
 
-interface EmploymentRecord {
-  id: string;
-  jobTitle: string;
-  department: string;
-  payAmount: number;
-  startDate: string;
-  changeReason: string | null;
-}
-
-interface Employee {
-  id: string;
-  firstName: string;
-  lastName: string;
-  niNumber: string | null;
-  addressLine1: string | null;
-  postcode: string | null;
-  emergencyName: string | null;
-  emergencyPhone: string | null;
-  records: EmploymentRecord[];
-}
-
 export default function Dashboard() {
   const router = useRouter();
-  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [employees, setEmployees] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState('Employees');
   const [profileTab, setProfileTab] = useState('Overview');
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
+  const [selectedEmployee, setSelectedEmployee] = useState<any>(null);
   const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [showSensitive, setShowSensitive] = useState(false);
@@ -64,15 +43,14 @@ export default function Dashboard() {
   }, [router]);
 
   const handleCreate = async () => {
-    if (!newEmployee.firstName || !newEmployee.lastName) return alert("First and Last name are required.");
+    if (!newEmployee.firstName || !newEmployee.lastName) return alert("Required fields missing");
     try {
       const res = await fetch(`${API_BASE}/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           ...newEmployee, 
-          email: `${newEmployee.firstName.toLowerCase()}.${newEmployee.lastName.toLowerCase()}${Math.floor(Math.random() * 1000)}@vanguard-internal.com`, 
-          password: 'TemporaryPassword123!' 
+          email: `${newEmployee.firstName.toLowerCase()}.${newEmployee.lastName.toLowerCase()}${Date.now()}@vanguard.com`
         }),
       });
       if (res.ok) {
@@ -91,16 +69,10 @@ export default function Dashboard() {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          firstName: selectedEmployee.firstName,
-          lastName: selectedEmployee.lastName,
+          ...selectedEmployee, // Includes personal data
           jobTitle: currentRecord.jobTitle,
           department: currentRecord.department,
-          payAmount: Number(currentRecord.payAmount),
-          niNumber: selectedEmployee.niNumber,
-          addressLine1: selectedEmployee.addressLine1,
-          postcode: selectedEmployee.postcode,
-          emergencyName: selectedEmployee.emergencyName,
-          emergencyPhone: selectedEmployee.emergencyPhone
+          payAmount: currentRecord.payAmount
         }),
       });
       if (res.ok) {
@@ -111,7 +83,7 @@ export default function Dashboard() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("CRITICAL: Permanently terminate this employment record? This action is immutable for audit purposes.")) return;
+    if (!confirm("Terminate this employment record? This is an immutable audit action.")) return;
     try {
       const res = await fetch(`${API_BASE}/employees/${id}`, { method: 'DELETE' });
       if (res.ok) {
@@ -214,7 +186,7 @@ export default function Dashboard() {
                     <input className="p-4 bg-slate-50 border rounded-2xl outline-none font-bold" placeholder="Phone Number" value={newEmployee.emergencyPhone} onChange={(e) => setNewEmployee({...newEmployee, emergencyPhone: e.target.value})} />
                   </div>
                 </div>
-                <div className="space-y-4">
+                <div className="space-y-4 pt-4 border-t">
                   <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Role & Pay</p>
                   <input className="w-full p-4 bg-slate-50 border rounded-2xl outline-none font-bold" placeholder="Job Title" value={newEmployee.jobTitle} onChange={(e) => setNewEmployee({...newEmployee, jobTitle: e.target.value})} />
                   <div className="grid grid-cols-2 gap-4">
@@ -225,7 +197,7 @@ export default function Dashboard() {
                   </div>
                 </div>
               </div>
-              <div className="p-8 border-t bg-slate-50"><button onClick={handleCreate} className="w-full py-5 bg-blue-600 text-white rounded-[2rem] font-black shadow-xl hover:bg-blue-700 transition-all uppercase tracking-widest">Onboard Personnel</button></div>
+              <div className="p-8 border-t bg-slate-50"><button onClick={handleCreate} className="w-full py-5 bg-blue-600 text-white rounded-[2rem] font-black shadow-xl hover:bg-blue-700 transition-all uppercase tracking-widest active:scale-95">Onboard Personnel</button></div>
             </div>
           </div>
         )}
@@ -233,7 +205,7 @@ export default function Dashboard() {
         {isPanelOpen && selectedEmployee && (
           <div className="fixed inset-0 z-50 overflow-hidden">
             <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => setIsPanelOpen(false)} />
-            <div className="absolute inset-y-0 right-0 max-w-xl w-full bg-white shadow-2xl flex flex-col">
+            <div className="absolute inset-y-0 right-0 max-w-xl w-full bg-white shadow-2xl flex flex-col animate-in slide-in-from-right duration-500">
               <div className="p-8 pb-4 flex flex-col gap-6">
                 <div className="flex justify-between items-start">
                   <div className="flex items-center gap-5">
@@ -275,7 +247,7 @@ export default function Dashboard() {
                     </div>
                     <div className="space-y-4">
                       <h4 className="font-black text-xs uppercase tracking-widest flex items-center gap-2"><History size={18}/> Service History</h4>
-                      {selectedEmployee.records.map((rec) => (
+                      {selectedEmployee.records.map((rec: any) => (
                         <div key={rec.id} className="pl-8 border-l-4 border-slate-100 relative py-2">
                           <div className="absolute -left-[14px] top-4 w-6 h-6 rounded-full bg-blue-600 border-4 border-white shadow-sm" />
                           <p className="font-black text-slate-900 text-lg">{rec.jobTitle}</p>
@@ -326,12 +298,12 @@ export default function Dashboard() {
                 {isEditing ? (
                   <>
                     <button onClick={() => setIsEditing(false)} className="py-4 bg-white border border-slate-200 rounded-2xl font-black uppercase text-xs tracking-widest transition-all">Discard</button>
-                    <button onClick={handleUpdate} className="py-4 bg-blue-600 text-white rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl flex items-center justify-center gap-2"><Save size={16}/> Save Changes</button>
+                    <button onClick={handleUpdate} className="py-4 bg-blue-600 text-white rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl active:scale-95 flex items-center justify-center gap-2 transition-all"><Save size={16}/> Save Changes</button>
                   </>
                 ) : (
                   <>
-                    <button onClick={() => handleDelete(selectedEmployee.id)} className="py-4 bg-red-50 text-red-600 rounded-2xl font-black uppercase text-xs tracking-widest transition-all hover:bg-red-100 flex items-center justify-center gap-2"><Trash2 size={16}/> Terminate</button>
-                    <button onClick={() => setIsEditing(true)} className="py-4 bg-slate-900 text-white rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl flex items-center justify-center gap-2"><Edit3 size={16}/> Edit Dossier</button>
+                    <button onClick={() => handleDelete(selectedEmployee.id)} className="py-4 bg-red-50 text-red-600 rounded-2xl font-black uppercase text-xs tracking-widest transition-all hover:bg-red-100 flex items-center justify-center gap-2 active:scale-95"><Trash2 size={16}/> Terminate</button>
+                    <button onClick={() => setIsEditing(true)} className="py-4 bg-slate-900 text-white rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl active:scale-95 flex items-center justify-center gap-2 transition-all"><Edit3 size={16}/> Edit Dossier</button>
                   </>
                 )}
               </div>
