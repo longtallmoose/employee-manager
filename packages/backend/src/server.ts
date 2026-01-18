@@ -1,4 +1,3 @@
-// packages/backend/src/server.ts
 import express from 'express';
 import cors from 'cors';
 import { db } from './lib/db';
@@ -13,7 +12,6 @@ const PORT = process.env.PORT || 4000;
 app.use(cors({ origin: '*', credentials: true }));
 app.use(express.json());
 
-// 1. ONBOARD (Creates User + Employee + EmploymentRecord)
 app.post('/api/auth/register', async (req, res) => {
   try {
     const { email, password, firstName, lastName, jobTitle, department, payAmount, niNumber, addressLine1, postcode, emergencyName, emergencyPhone } = req.body;
@@ -41,48 +39,34 @@ app.post('/api/auth/register', async (req, res) => {
     });
     res.status(201).json(result);
   } catch (error) {
-    console.error(error);
     res.status(500).json({ error: 'Registration failed' });
   }
 });
 
-// 2. UPDATE (Handles Personal Edit + Job/Salary Versioning)
 app.put('/api/employees/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const { firstName, lastName, niNumber, addressLine1, postcode, emergencyName, emergencyPhone, jobTitle, department, payAmount } = req.body;
-
-    const result = await db.$transaction(async (tx) => {
-      // Update Personal Data
+    await db.$transaction(async (tx) => {
       await tx.employee.update({
         where: { id },
         data: { firstName, lastName, niNumber, addressLine1, postcode, emergencyName, emergencyPhone }
       });
-
-      // Versioning Logic: Close old record, open new one
-      await tx.employmentRecord.updateMany({
-        where: { employeeId: id, endDate: null },
-        data: { endDate: new Date() }
-      });
-
+      await tx.employmentRecord.updateMany({ where: { employeeId: id, endDate: null }, data: { endDate: new Date() } });
       await tx.employmentRecord.create({
         data: {
           employeeId: id, jobTitle, department, payAmount: Number(payAmount),
-          startDate: new Date(), location: 'Head Office',
-          employmentType: 'FULL_TIME', payBasis: 'SALARIED', hoursPerWeek: 37.5,
-          changeReason: 'Dossier Update', changedBy: 'ADMIN'
+          startDate: new Date(), location: 'Head Office', employmentType: 'FULL_TIME',
+          payBasis: 'SALARIED', hoursPerWeek: 37.5, changeReason: 'Dossier Update', changedBy: 'ADMIN'
         }
       });
-      return { success: true };
     });
-    res.json(result);
+    res.json({ success: true });
   } catch (error) {
-    console.error(error);
     res.status(500).json({ error: 'Update failed' });
   }
 });
 
-// 3. DELETE (Cascading Fix)
 app.delete('/api/employees/:id', async (req, res) => {
   try {
     const { id } = req.params;
