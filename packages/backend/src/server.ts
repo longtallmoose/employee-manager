@@ -21,7 +21,7 @@ app.get('/', (req, res) => {
   res.send('Vanguard HR Engine: Active 🚀');
 });
 
-// 1. REGISTER NEW STAFF (Atomic Transaction)
+// 1. REGISTER NEW STAFF
 app.post('/api/auth/register', async (req, res) => {
   try {
     const { email, password, firstName, lastName, role, jobTitle, department, payAmount } = req.body;
@@ -33,8 +33,8 @@ app.post('/api/auth/register', async (req, res) => {
         data: {
           email,
           passwordHash: hashedPassword,
-          // Use string casting to bypass generation mismatch
-          role: (role as any) || 'EMPLOYEE',
+          // @ts-ignore - Forcing role through generation lag
+          role: role || 'EMPLOYEE',
         },
       });
 
@@ -43,15 +43,16 @@ app.post('/api/auth/register', async (req, res) => {
           userId: user.id,
           firstName,
           lastName,
+          // @ts-ignore - Forcing records through generation lag
           records: {
             create: {
               jobTitle: jobTitle || 'New Starter',
-              department: (department as any) || 'OPERATIONS',
+              department: department || 'OPERATIONS',
               location: 'Head Office',
               payAmount: payAmount || 0,
               startDate: new Date(),
-              employmentType: 'FULL_TIME' as any,
-              payBasis: 'SALARIED' as any,
+              employmentType: 'FULL_TIME',
+              payBasis: 'SALARIED',
               hoursPerWeek: 37.5,
               changeReason: 'Initial Hire'
             }
@@ -65,11 +66,11 @@ app.post('/api/auth/register', async (req, res) => {
     res.status(201).json({ success: true, data: result });
   } catch (error) {
     console.error('Registration Error:', error);
-    res.status(500).json({ success: false, message: 'Failed to create staff record' });
+    res.status(500).json({ success: false, message: 'Failed to create record' });
   }
 });
 
-// 2. UPDATE EMPLOYEE (Versioned logic)
+// 2. UPDATE EMPLOYEE
 app.put('/api/employees/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -90,15 +91,15 @@ app.put('/api/employees/:id', async (req, res) => {
         data: {
           employeeId: id,
           jobTitle: jobTitle || 'Updated Role',
-          department: (department as any) || 'OPERATIONS',
+          department: department || 'OPERATIONS',
           location: 'Head Office',
           payAmount: payAmount || 0,
           startDate: new Date(),
-          employmentType: 'FULL_TIME' as any,
-          payBasis: 'SALARIED' as any,
+          employmentType: 'FULL_TIME',
+          payBasis: 'SALARIED',
           hoursPerWeek: 37.5,
-          changeReason: changeReason || 'Role/Salary Adjustment',
-          changedBy: 'SYSTEM_ADMIN'
+          changeReason: changeReason || 'Update',
+          changedBy: 'SYSTEM'
         }
       });
 
@@ -107,8 +108,7 @@ app.put('/api/employees/:id', async (req, res) => {
 
     res.json(result);
   } catch (error) {
-    console.error('Update Error:', error);
-    res.status(500).json({ error: 'Failed to update versioned record' });
+    res.status(500).json({ error: 'Update failed' });
   }
 });
 
@@ -117,16 +117,13 @@ app.get('/api/employees', async (req, res) => {
   try {
     const employees = await db.employee.findMany({
       include: {
-        records: {
-          where: { endDate: null },
-          take: 1
-        }
+        records: { where: { endDate: null }, take: 1 }
       },
       orderBy: { createdAt: 'desc' }
     });
     res.json(employees);
   } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch employees' });
+    res.status(500).json({ error: 'Fetch failed' });
   }
 });
 
@@ -141,12 +138,13 @@ app.post('/api/auth/login', async (req, res) => {
     if (!isValid) return res.status(400).json({ error: 'Invalid password' });
 
     const token = jwt.sign(
-      { userId: user.id, email: user.email, role: (user as any).role },
-      process.env.JWT_SECRET || 'fallback_secret',
+      // @ts-ignore - Role exists in DB but TS is lagging
+      { userId: user.id, email: user.email, role: user.role },
+      process.env.JWT_SECRET || 'secret',
       { expiresIn: '8h' }
     );
 
-    res.json({ token, user: { email: user.email, role: (user as any).role } });
+    res.json({ token, user: { email: user.email } });
   } catch (error) {
     res.status(500).json({ error: 'Login failed' });
   }
@@ -159,10 +157,10 @@ app.delete('/api/employees/:id', async (req, res) => {
     await db.employee.delete({ where: { id } });
     res.json({ success: true });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to delete record' });
+    res.status(500).json({ error: 'Delete failed' });
   }
 });
 
 app.listen(PORT, () => {
-  console.log(`\n🚀 Vanguard HR Engine: Listening on port ${PORT}`);
+  console.log(`🚀 Vanguard Engine Live on ${PORT}`);
 });
