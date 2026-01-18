@@ -1,3 +1,4 @@
+// packages/backend/src/server.ts
 import express from 'express';
 import cors from 'cors';
 import { AuthService } from './services/auth-service';
@@ -11,7 +12,7 @@ dotenv.config();
 
 const app = express();
 
-// CRITICAL FIX: Use the port Render gives us, or fallback to 4000 locally
+// Use the port Render gives us, or fallback to 4000 locally
 const PORT = process.env.PORT || 4000;
 
 // Middleware (Allows the frontend to talk to the backend)
@@ -20,9 +21,34 @@ app.use(express.json());
 
 // --- ROUTES ---
 
-// Health Check
+// Health Check (To test if server is running)
 app.get('/', (req, res) => {
   res.send('Employee Platform API is Active 🚀');
+});
+
+// UPDATE AN EMPLOYEE (The "Save" button logic)
+app.put('/api/employees/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { firstName, lastName, role } = req.body;
+
+    console.log(`Update request received for ID: ${id}`, req.body);
+
+    const updatedEmployee = await db.employee.update({
+      where: { id },
+      data: {
+        firstName,
+        lastName,
+        role,
+      },
+    });
+
+    console.log('Successfully updated database for:', updatedEmployee.id);
+    res.json(updatedEmployee);
+  } catch (error) {
+    console.error('Database update error:', error);
+    res.status(500).json({ error: 'Failed to update employee' });
+  }
 });
 
 // Registration Endpoint
@@ -78,7 +104,6 @@ app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // 1. Find the user
     const user = await db.user.findUnique({
       where: { email },
     });
@@ -87,15 +112,12 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(400).json({ error: 'User not found' });
     }
 
-    // 2. Check the password
     const isValid = await bcrypt.compare(password, user.passwordHash);
     
     if (!isValid) {
       return res.status(400).json({ error: 'Invalid password' });
     }
 
-    // 3. Generate the Token using the Environment Variable (Secure)
-    // If JWT_SECRET is missing, it falls back to 'super_secret' (preventing crashes)
     const secret = process.env.JWT_SECRET || 'super_secret';
     
     const token = jwt.sign(
@@ -109,28 +131,6 @@ app.post('/api/auth/login', async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Login failed' });
-  }
-});
-
-// UPDATE AN EMPLOYEE
-app.put('/api/employees/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { firstName, lastName, role } = req.body;
-
-    const updatedEmployee = await db.employee.update({
-      where: { id },
-      data: {
-        firstName,
-        lastName,
-        role,
-      },
-    });
-
-    res.json(updatedEmployee);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Failed to update employee' });
   }
 });
 
