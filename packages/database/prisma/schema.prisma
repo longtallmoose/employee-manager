@@ -119,11 +119,16 @@ model Employee {
   dateOfBirth     DateTime?
   niNumber        String?
   phoneNumber     String?
-  addressLine1    String?            // Made optional to prevent register crashes
+  addressLine1    String?            
   addressLine2    String?
-  city            String?            // Made optional
-  postcode        String?            // Made optional
+  city            String? 
+  region          String?            // <--- Added this to match server.ts
+  postcode        String?            
   country         String             @default("UK")
+  
+  // <--- Added this to match server.ts
+  rightToWorkStatus RightToWorkStatus @default(PENDING_CHECK)
+
   emergencyName   String?
   emergencyRel    String?
   emergencyPhone  String?
