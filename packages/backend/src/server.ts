@@ -21,12 +21,12 @@ app.use(express.json());
 
 // --- ROUTES ---
 
-// Health Check (To test if server is running)
+// 1. Health Check (To test if server is running)
 app.get('/', (req, res) => {
   res.send('Employee Platform API is Active 🚀');
 });
 
-// UPDATE AN EMPLOYEE (The "Save" button logic)
+// 2. UPDATE AN EMPLOYEE (The "Save" button logic)
 app.put('/api/employees/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -52,38 +52,35 @@ app.put('/api/employees/:id', async (req, res) => {
   }
 });
 
-    console.log('Successfully updated database for:', updatedEmployee.id);
-    res.json(updatedEmployee);
-  } catch (error) {
-    console.error('Database update error:', error);
-    res.status(500).json({ error: 'Failed to update employee' });
-  }
-});
-
-// Registration Endpoint
+// 3. Registration Endpoint
 app.post('/api/auth/register', async (req, res) => {
-  const { email, password, firstName, lastName, role } = req.body;
+  try {
+    const { email, password, firstName, lastName, role } = req.body;
 
-  if (!email || !password || !firstName || !lastName) {
-    return res.status(400).json({ success: false, message: 'Missing fields' });
+    if (!email || !password || !firstName || !lastName) {
+      return res.status(400).json({ success: false, message: 'Missing fields' });
+    }
+
+    const result = await AuthService.register({
+      email,
+      password,
+      firstName,
+      lastName,
+      role: role || 'EMPLOYEE',
+    });
+
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+
+    return res.status(201).json(result);
+  } catch (error) {
+    console.error('Registration error:', error);
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
-
-  const result = await AuthService.register({
-    email,
-    password,
-    firstName,
-    lastName,
-    role: role || 'EMPLOYEE',
-  });
-
-  if (!result.success) {
-    return res.status(400).json(result);
-  }
-
-  return res.status(201).json(result);
 });
 
-// GET ALL EMPLOYEES
+// 4. GET ALL EMPLOYEES
 app.get('/api/employees', async (req, res) => {
   try {
     const employees = await db.employee.findMany({
@@ -95,7 +92,7 @@ app.get('/api/employees', async (req, res) => {
   }
 });
 
-// DELETE AN EMPLOYEE
+// 5. DELETE AN EMPLOYEE
 app.delete('/api/employees/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -108,7 +105,7 @@ app.delete('/api/employees/:id', async (req, res) => {
   }
 });
 
-// LOGIN ROUTE
+// 6. LOGIN ROUTE
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -138,7 +135,7 @@ app.post('/api/auth/login', async (req, res) => {
     res.json({ token, user: { email: user.email } });
 
   } catch (error) {
-    console.error(error);
+    console.error('Login error:', error);
     res.status(500).json({ error: 'Login failed' });
   }
 });
