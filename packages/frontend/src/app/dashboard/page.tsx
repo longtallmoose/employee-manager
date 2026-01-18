@@ -32,7 +32,6 @@ export default function Dashboard() {
   const [isAddingCase, setIsAddingCase] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   
-  // Forms
   const [newEmployee, setNewEmployee] = useState({ 
     firstName: '', lastName: '', jobTitle: '', department: 'OPERATIONS', 
     payAmount: 0, niNumber: '', addressLine1: '', postcode: '',
@@ -53,20 +52,26 @@ export default function Dashboard() {
         fetch(`${API_BASE}/employees`),
         fetch(`${API_BASE}/cases`)
       ]);
-      const empData = await empRes.json();
-      const caseData = await caseRes.json();
-      setEmployees(empData);
-      setCases(caseData);
 
-      if (selectedEmployee) {
+      // SAFETY CHECK: Ensure we got valid arrays back
+      let empData = [], caseData = [];
+      
+      if (empRes.ok) empData = await empRes.json();
+      if (caseRes.ok) caseData = await caseRes.json();
+
+      setEmployees(Array.isArray(empData) ? empData : []);
+      setCases(Array.isArray(caseData) ? caseData : []);
+
+      // Refresh open panels
+      if (selectedEmployee && Array.isArray(empData)) {
         const updated = empData.find((e:any) => e.id === selectedEmployee.id);
         if (updated) setSelectedEmployee(updated);
       }
-      if (selectedCase) {
+      if (selectedCase && Array.isArray(caseData)) {
         const updatedCase = caseData.find((c:any) => c.id === selectedCase.id);
         if (updatedCase) setSelectedCase(updatedCase);
       }
-    } catch (err) { console.error(err); }
+    } catch (err) { console.error("Dashboard Load Error:", err); }
   };
 
   useEffect(() => { fetchData(); }, []);
