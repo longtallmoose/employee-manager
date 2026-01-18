@@ -12,7 +12,7 @@ datasource db {
 }
 
 // --------------------------------------
-// ENUMS (UK Context & System)
+// ENUMS
 // --------------------------------------
 
 enum UserRole {
@@ -100,7 +100,7 @@ enum DocumentCategory {
 }
 
 // --------------------------------------
-// CORE IDENTITY & ACCESS
+// CORE MODELS
 // --------------------------------------
 
 model User {
@@ -114,7 +114,7 @@ model User {
   lockedUntil         DateTime?
    
   employee       Employee?
-  auditLogs       AuditLog[] 
+  auditLogs      AuditLog[] 
    
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
@@ -130,28 +130,34 @@ model Employee {
   preferredName   String?
   dateOfBirth     DateTime?
   niNumber        String?   
+  
+  // Compliance
+  rightToWorkStatus RightToWorkStatus @default(PENDING_CHECK)
    
-  phoneNumber     String?
+  // Contact Info
+  phoneNumber     String?   // Personal Mobile
   addressLine1    String?
   addressLine2    String?
   city            String?
+  region          String?   // County/State
   postcode        String?
   country         String    @default("UK")
    
+  // Emergency Contact
   emergencyName   String?
-  emergencyRel    String?
+  emergencyRel    String?   // Relationship
   emergencyPhone  String?
 
   avatarUrl       String?
   isActive        Boolean   @default(true)
    
-  records          EmploymentRecord[]
-  documents        Document[]
-  leaveRequests    LeaveRequest[]
-  shifts           Shift[]
-  casesInvolved    CaseInvolvedParty[]
-  training         EmployeeTraining[]
-  bankDetails      BankDetails?
+  records         EmploymentRecord[]
+  documents       Document[]
+  leaveRequests   LeaveRequest[]
+  shifts          Shift[]
+  casesInvolved   CaseInvolvedParty[]
+  training        EmployeeTraining[]
+  bankDetails     BankDetails?
    
   managerId       String?
   manager         Employee?  @relation("DirectReports", fields: [managerId], references: [id])
@@ -167,7 +173,7 @@ model EmploymentRecord {
   employee        Employee       @relation(fields: [employeeId], references: [id])
    
   startDate       DateTime
-  endDate         DateTime?      
+  endDate         DateTime?       
    
   jobTitle        String
   department      String

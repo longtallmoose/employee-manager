@@ -16,12 +16,13 @@ app.use(express.json());
 const authenticate = (req: any, res: any, next: any) => {
   const token = req.headers.authorization?.split(' ')[1];
   if (!token) return res.status(401).json({ error: 'Authentication required' });
+  
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret') as any;
     req.userId = decoded.userId;
     next();
   } catch (err) {
-    res.status(401).json({ error: 'Invalid token' });
+    res.status(401).json({ error: 'Invalid or expired token' });
   }
 };
 
@@ -29,9 +30,16 @@ const authenticate = (req: any, res: any, next: any) => {
 
 app.post('/api/auth/register', async (req, res) => {
   try {
-    const { email, password, firstName, lastName, jobTitle, department, payAmount, niNumber, addressLine1, postcode, emergencyName, emergencyPhone } = req.body;
+    const { 
+      email, password, firstName, lastName, 
+      jobTitle, department, payAmount, 
+      niNumber, phoneNumber, rightToWorkStatus,
+      addressLine1, city, region, postcode, country,
+      emergencyName, emergencyPhone, emergencyRel,
+      sortCode, accountNumber, bankName
+    } = req.body;
     
-    // Transaction
+    // Transaction: Create User -> Employee -> Employment Record -> Bank Details
     const result = await db.$transaction(async (tx) => {
       const hashedPassword = await bcrypt.hash(password || 'StaffPilot2026!', 10);
       
@@ -43,21 +51,27 @@ app.post('/api/auth/register', async (req, res) => {
         },
       });
 
-      // Removed 'country' field to prevent schema mismatch errors
       const employee = await tx.employee.create({
         data: {
           userId: user.id, 
-          firstName, 
-          lastName, 
-          niNumber: niNumber || 'PENDING', 
-          addressLine1: addressLine1 || 'No Address', 
-          postcode: postcode || 'N/A',
-          emergencyName: emergencyName || 'Not Set', 
-          emergencyPhone: emergencyPhone || 'Not Set', 
-          dateOfBirth: new Date('1990-01-01'), 
-          city: 'London'
+          firstName, lastName, niNumber, 
+          phoneNumber, rightToWorkStatus: rightToWorkStatus || 'PENDING_CHECK',
+          addressLine1, city, region, postcode, country,
+          emergencyName, emergencyPhone, emergencyRel,
+          dateOfBirth: new Date('1990-01-01')
         }
       });
+
+      // Optional: Create Bank Details if provided
+      if (sortCode && accountNumber) {
+        await tx.bankDetails.create({
+          data: {
+            employeeId: employee.id,
+            accountName: `${firstName} ${lastName}`,
+            sortCode, accountNumber, bankName: bankName || 'Main Bank'
+          }
+        });
+      }
 
       await tx.employmentRecord.create({
         data: {
@@ -79,7 +93,7 @@ app.post('/api/auth/register', async (req, res) => {
     res.status(201).json(result);
   } catch (error) { 
     console.error("Register Error:", error);
-    res.status(500).json({ error: 'Registration failed - check server logs' }); 
+    res.status(500).json({ error: 'Registration failed' }); 
   }
 });
 
@@ -100,7 +114,10 @@ app.get('/api/auth/me', authenticate, async (req: any, res: any) => {
   try {
     const employee = await db.employee.findUnique({
       where: { userId: req.userId },
-      include: { records: { orderBy: { startDate: 'desc' } } }
+      include: { 
+        records: { orderBy: { startDate: 'desc' } },
+        bankDetails: true
+      }
     });
     if (!employee) return res.status(404).json({ error: 'Profile not found' });
     res.json(employee);
@@ -112,7 +129,10 @@ app.get('/api/auth/me', authenticate, async (req: any, res: any) => {
 app.get('/api/employees', async (req, res) => {
   try {
     const employees = await db.employee.findMany({
-      include: { records: { orderBy: { startDate: 'desc' } } },
+      include: { 
+        records: { orderBy: { startDate: 'desc' } },
+        bankDetails: true
+      },
       orderBy: { createdAt: 'desc' }
     });
     res.json(employees);
@@ -125,20 +145,47 @@ app.get('/api/employees', async (req, res) => {
 app.put('/api/employees/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { firstName, lastName, niNumber, addressLine1, postcode, emergencyName, emergencyPhone, jobTitle, department, payAmount } = req.body;
+    const { 
+      firstName, lastName, niNumber, phoneNumber, rightToWorkStatus,
+      addressLine1, city, region, postcode, country,
+      emergencyName, emergencyPhone, emergencyRel,
+      jobTitle, department, payAmount,
+      sortCode, accountNumber, bankName
+    } = req.body;
     
     await db.$transaction(async (tx) => {
+      // 1. Update Core Profile
       await tx.employee.update({
         where: { id },
-        data: { firstName, lastName, niNumber, addressLine1, postcode, emergencyName, emergencyPhone }
+        data: { 
+          firstName, lastName, niNumber, phoneNumber, rightToWorkStatus,
+          addressLine1, city, region, postcode, country,
+          emergencyName, emergencyPhone, emergencyRel
+        }
       });
+
+      // 2. Update Banking (Upsert ensures it creates if missing)
+      if (sortCode && accountNumber) {
+        await tx.bankDetails.upsert({
+          where: { employeeId: id },
+          create: {
+            employeeId: id,
+            accountName: `${firstName} ${lastName}`,
+            sortCode, accountNumber, bankName
+          },
+          update: { sortCode, accountNumber, bankName }
+        });
+      }
       
+      // 3. Update Job (Versioned)
       if (jobTitle || department || payAmount) {
          await tx.employmentRecord.updateMany({ where: { employeeId: id, endDate: null }, data: { endDate: new Date() } });
          await tx.employmentRecord.create({
            data: {
-             employeeId: id, jobTitle, department, payAmount: Number(payAmount), startDate: new Date(), location: 'Head Office',
-             employmentType: 'FULL_TIME', payBasis: 'SALARIED', hoursPerWeek: 37.5, changeReason: 'Dossier Update', changedBy: 'ADMIN'
+             employeeId: id, jobTitle, department, payAmount: Number(payAmount), 
+             startDate: new Date(), location: 'Head Office',
+             employmentType: 'FULL_TIME', payBasis: 'SALARIED', hoursPerWeek: 37.5, 
+             changeReason: 'Dossier Update', changedBy: 'ADMIN'
            }
          });
       }
@@ -153,7 +200,9 @@ app.delete('/api/employees/:id', async (req, res) => {
     const emp = await db.employee.findUnique({ where: { id } });
     if (emp) {
       await db.$transaction([
+        db.bankDetails.deleteMany({ where: { employeeId: id } }),
         db.employmentRecord.deleteMany({ where: { employeeId: id } }),
+        db.caseInvolvedParty.deleteMany({ where: { employeeId: id } }),
         db.employee.delete({ where: { id } }),
         db.user.delete({ where: { id: emp.userId } })
       ]);
@@ -166,7 +215,6 @@ app.delete('/api/employees/:id', async (req, res) => {
 
 app.get('/api/cases', async (req, res) => {
   try {
-    // Try to fetch cases, if table doesn't exist or fails, return empty array to prevent frontend crash
     const cases = await db.hRCase.findMany({
       include: {
         involvedParties: { include: { employee: true } }, 
@@ -175,10 +223,7 @@ app.get('/api/cases', async (req, res) => {
       orderBy: { updatedAt: 'desc' }
     });
     res.json(cases);
-  } catch (error) { 
-    console.error("Case Fetch Error:", error);
-    res.json([]); // Return empty array on error so dashboard still loads
-  }
+  } catch (error) { res.json([]); }
 });
 
 app.post('/api/cases', async (req, res) => {

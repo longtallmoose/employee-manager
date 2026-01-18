@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
-  Users, Clock, ShieldCheck, X, ChevronRight, Search, Plus, 
+  Users, ShieldCheck, X, ChevronRight, Search, Plus, 
   Trash2, Building2, PoundSterling, History, Lock, MapPin, 
   Phone, CreditCard, HeartPulse, Save, Edit3, UserPlus, 
   Briefcase, Scale, AlertTriangle, Gavel
@@ -32,10 +32,14 @@ export default function Dashboard() {
   const [isAddingCase, setIsAddingCase] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   
+  // Forms
   const [newEmployee, setNewEmployee] = useState({ 
-    firstName: '', lastName: '', jobTitle: '', department: 'OPERATIONS', 
-    payAmount: 0, niNumber: '', addressLine1: '', postcode: '',
-    emergencyName: '', emergencyPhone: ''
+    firstName: '', lastName: '', 
+    niNumber: '', phoneNumber: '', rightToWorkStatus: 'PENDING_CHECK',
+    addressLine1: '', city: '', region: '', postcode: '', country: 'UK',
+    emergencyName: '', emergencyPhone: '', emergencyRel: '',
+    sortCode: '', accountNumber: '', bankName: '',
+    jobTitle: '', department: 'OPERATIONS', payAmount: 0
   });
 
   const [newCaseData, setNewCaseData] = useState({
@@ -53,16 +57,13 @@ export default function Dashboard() {
         fetch(`${API_BASE}/cases`)
       ]);
 
-      // SAFETY CHECK: Ensure we got valid arrays back
       let empData = [], caseData = [];
-      
       if (empRes.ok) empData = await empRes.json();
       if (caseRes.ok) caseData = await caseRes.json();
 
       setEmployees(Array.isArray(empData) ? empData : []);
       setCases(Array.isArray(caseData) ? caseData : []);
 
-      // Refresh open panels
       if (selectedEmployee && Array.isArray(empData)) {
         const updated = empData.find((e:any) => e.id === selectedEmployee.id);
         if (updated) setSelectedEmployee(updated);
@@ -90,15 +91,22 @@ export default function Dashboard() {
     if (!selectedEmployee) return;
     setIsSaving(true);
     const currentRecord = selectedEmployee.records[0] || {};
+    
+    // Merge Personal + Job + Banking Data
+    const payload = {
+      ...selectedEmployee, 
+      sortCode: selectedEmployee.bankDetails?.sortCode,
+      accountNumber: selectedEmployee.bankDetails?.accountNumber,
+      bankName: selectedEmployee.bankDetails?.bankName,
+      jobTitle: currentRecord.jobTitle,
+      department: currentRecord.department,
+      payAmount: currentRecord.payAmount
+    };
+
     await fetch(`${API_BASE}/employees/${selectedEmployee.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ...selectedEmployee,
-        jobTitle: currentRecord.jobTitle,
-        department: currentRecord.department,
-        payAmount: currentRecord.payAmount
-      }),
+      body: JSON.stringify(payload),
     });
     setIsEditing(false);
     fetchData();
@@ -116,6 +124,12 @@ export default function Dashboard() {
     if (!selectedEmployee?.records) return;
     const updatedRecords = selectedEmployee.records.map((rec: any, index: number) => index === 0 ? { ...rec, [field]: value } : rec);
     setSelectedEmployee({ ...selectedEmployee, records: updatedRecords });
+  };
+
+  const updateBankField = (field: string, value: any) => {
+    if (!selectedEmployee) return;
+    const updatedBank = { ...selectedEmployee.bankDetails, [field]: value };
+    setSelectedEmployee({ ...selectedEmployee, bankDetails: updatedBank });
   };
 
   const handleCreateCase = async () => {
@@ -159,7 +173,7 @@ export default function Dashboard() {
 
       <main className="flex-1 flex flex-col overflow-y-auto relative">
         <header className="bg-white h-16 border-b flex items-center justify-between px-8 sticky top-0 z-10">
-          <div className="flex items-center gap-4 bg-slate-100 px-4 py-2 rounded-full w-96 border">
+          <div className="flex items-center gap-4 bg-slate-100 px-4 py-2 rounded-full w-96 border border-slate-200">
             <Search className="text-slate-400 w-4 h-4" />
             <input type="text" placeholder="Search..." className="bg-transparent border-none outline-none text-sm w-full" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
           </div>
@@ -223,62 +237,75 @@ export default function Dashboard() {
         {/* MODAL: CREATE EMPLOYEE */}
         {isAddingNew && (
           <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/50 backdrop-blur-sm" onClick={() => setIsAddingNew(false)}>
-            <div className="max-w-xl w-full bg-white h-full p-8 overflow-y-auto space-y-6 shadow-2xl animate-in slide-in-from-right duration-500" onClick={e => e.stopPropagation()}>
+            <div className="max-w-xl w-full bg-white h-full p-8 overflow-y-auto space-y-8 shadow-2xl animate-in slide-in-from-right duration-500" onClick={e => e.stopPropagation()}>
               <div className="flex justify-between items-center"><h3 className="text-2xl font-black">New Hire</h3><button onClick={() => setIsAddingNew(false)}><X size={28}/></button></div>
+              
+              {/* Identity Section */}
               <div className="space-y-4">
-                <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Personal</p>
-                <div className="grid grid-cols-2 gap-4"><input className="p-4 bg-slate-50 border rounded-2xl font-bold" placeholder="First Name" onChange={e => setNewEmployee({...newEmployee, firstName: e.target.value})} /><input className="p-4 bg-slate-50 border rounded-2xl font-bold" placeholder="Last Name" onChange={e => setNewEmployee({...newEmployee, lastName: e.target.value})} /></div>
-                <input className="w-full p-4 bg-slate-50 border rounded-2xl font-bold" placeholder="NI Number" onChange={e => setNewEmployee({...newEmployee, niNumber: e.target.value})} />
-                <input className="w-full p-4 bg-slate-50 border rounded-2xl font-bold" placeholder="Address" onChange={e => setNewEmployee({...newEmployee, addressLine1: e.target.value})} />
-                <input className="w-full p-4 bg-slate-50 border rounded-2xl font-bold" placeholder="Postcode" onChange={e => setNewEmployee({...newEmployee, postcode: e.target.value})} />
+                <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest border-b pb-2">Identity & Contact</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <input className="p-4 bg-slate-50 border rounded-2xl font-bold" placeholder="First Name" onChange={e => setNewEmployee({...newEmployee, firstName: e.target.value})} />
+                  <input className="p-4 bg-slate-50 border rounded-2xl font-bold" placeholder="Last Name" onChange={e => setNewEmployee({...newEmployee, lastName: e.target.value})} />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <input className="p-4 bg-slate-50 border rounded-2xl font-bold" placeholder="NI Number" onChange={e => setNewEmployee({...newEmployee, niNumber: e.target.value})} />
+                  <input className="p-4 bg-slate-50 border rounded-2xl font-bold" placeholder="Mobile Number" onChange={e => setNewEmployee({...newEmployee, phoneNumber: e.target.value})} />
+                </div>
               </div>
+
+              {/* Address Section */}
               <div className="space-y-4">
-                <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Job & Pay</p>
+                <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest border-b pb-2">Home Address</p>
+                <input className="w-full p-4 bg-slate-50 border rounded-2xl font-bold" placeholder="Address Line 1" onChange={e => setNewEmployee({...newEmployee, addressLine1: e.target.value})} />
+                <div className="grid grid-cols-2 gap-4">
+                  <input className="p-4 bg-slate-50 border rounded-2xl font-bold" placeholder="City" onChange={e => setNewEmployee({...newEmployee, city: e.target.value})} />
+                  <input className="p-4 bg-slate-50 border rounded-2xl font-bold" placeholder="Region/County" onChange={e => setNewEmployee({...newEmployee, region: e.target.value})} />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <input className="p-4 bg-slate-50 border rounded-2xl font-bold" placeholder="Postcode" onChange={e => setNewEmployee({...newEmployee, postcode: e.target.value})} />
+                  <input className="p-4 bg-slate-50 border rounded-2xl font-bold" placeholder="Country" value={newEmployee.country} onChange={e => setNewEmployee({...newEmployee, country: e.target.value})} />
+                </div>
+              </div>
+
+              {/* Emergency Section */}
+              <div className="space-y-4">
+                <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest border-b pb-2">Emergency Contact</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <input className="p-4 bg-slate-50 border rounded-2xl font-bold" placeholder="Contact Name" onChange={e => setNewEmployee({...newEmployee, emergencyName: e.target.value})} />
+                  <input className="p-4 bg-slate-50 border rounded-2xl font-bold" placeholder="Relationship" onChange={e => setNewEmployee({...newEmployee, emergencyRel: e.target.value})} />
+                </div>
+                <input className="w-full p-4 bg-slate-50 border rounded-2xl font-bold" placeholder="Emergency Phone" onChange={e => setNewEmployee({...newEmployee, emergencyPhone: e.target.value})} />
+              </div>
+
+              {/* Finance Section */}
+              <div className="space-y-4">
+                <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest border-b pb-2">Finance & Legal</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <select className="p-4 bg-slate-50 border rounded-2xl font-bold" onChange={e => setNewEmployee({...newEmployee, rightToWorkStatus: e.target.value})}>
+                    <option value="PENDING_CHECK">Pending Check</option>
+                    <option value="BRITISH_CITIZEN">British Citizen</option>
+                    <option value="SETTLED_STATUS">Settled Status</option>
+                    <option value="VISA_TIER_2">Skilled Worker Visa</option>
+                  </select>
+                  <input className="p-4 bg-slate-50 border rounded-2xl font-bold" placeholder="Bank Name" onChange={e => setNewEmployee({...newEmployee, bankName: e.target.value})} />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <input className="p-4 bg-slate-50 border rounded-2xl font-bold" placeholder="Sort Code (XX-XX-XX)" onChange={e => setNewEmployee({...newEmployee, sortCode: e.target.value})} />
+                  <input className="p-4 bg-slate-50 border rounded-2xl font-bold" placeholder="Account Number" onChange={e => setNewEmployee({...newEmployee, accountNumber: e.target.value})} />
+                </div>
+              </div>
+
+              {/* Role Section */}
+              <div className="space-y-4">
+                <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest border-b pb-2">Role & Pay</p>
                 <input className="w-full p-4 bg-slate-50 border rounded-2xl font-bold" placeholder="Job Title" onChange={e => setNewEmployee({...newEmployee, jobTitle: e.target.value})} />
                 <div className="grid grid-cols-2 gap-4">
                   <select className="p-4 bg-slate-50 border rounded-2xl font-bold" onChange={e => setNewEmployee({...newEmployee, department: e.target.value})}><option value="OPERATIONS">OPERATIONS</option><option value="HR">HR</option><option value="FINANCE">FINANCE</option></select>
                   <input type="number" className="p-4 bg-slate-50 border rounded-2xl font-bold" placeholder="Salary (£)" onChange={e => setNewEmployee({...newEmployee, payAmount: Number(e.target.value)})} />
                 </div>
               </div>
-              <button onClick={handleCreateEmployee} disabled={isSaving} className="w-full py-5 bg-blue-600 text-white rounded-3xl font-black uppercase tracking-widest disabled:opacity-50">{isSaving ? 'Saving...' : 'Onboard'}</button>
-            </div>
-          </div>
-        )}
 
-        {/* MODAL: CREATE CASE */}
-        {isAddingCase && (
-          <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/50 backdrop-blur-sm" onClick={() => setIsAddingCase(false)}>
-            <div className="max-w-xl w-full bg-white h-full p-8 overflow-y-auto space-y-6 shadow-2xl animate-in slide-in-from-right duration-500" onClick={e => e.stopPropagation()}>
-              <div className="flex justify-between items-center"><h3 className="text-2xl font-black text-red-600">Open Case File</h3><button onClick={() => setIsAddingCase(false)}><X size={28}/></button></div>
-              <p className="text-sm text-slate-500 font-medium">Initiating formal procedure. Auditable.</p>
-              
-              <div className="space-y-4">
-                <label className="text-xs font-black uppercase text-slate-400 tracking-widest">Subject</label>
-                <select className="w-full p-4 bg-slate-50 border rounded-2xl font-bold" onChange={e => setNewCaseData({...newCaseData, subjectId: e.target.value})}>
-                  <option value="">Select Employee...</option>
-                  {employees.map(e => <option key={e.id} value={e.id}>{e.firstName} {e.lastName}</option>)}
-                </select>
-              </div>
-
-              <div className="space-y-4">
-                <label className="text-xs font-black uppercase text-slate-400 tracking-widest">Classification</label>
-                <div className="grid grid-cols-2 gap-4">
-                  <select className="p-4 bg-slate-50 border rounded-2xl font-bold" onChange={e => setNewCaseData({...newCaseData, type: e.target.value})}>
-                    <option value="DISCIPLINARY">DISCIPLINARY</option><option value="GRIEVANCE">GRIEVANCE</option><option value="CAPABILITY_PERFORMANCE">PERFORMANCE</option>
-                  </select>
-                  <select className="p-4 bg-slate-50 border rounded-2xl font-bold" onChange={e => setNewCaseData({...newCaseData, riskLevel: e.target.value})}>
-                    <option value="HIGH">HIGH RISK</option><option value="MEDIUM">MEDIUM</option><option value="LOW">LOW</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <label className="text-xs font-black uppercase text-slate-400 tracking-widest">Allegation</label>
-                <input className="w-full p-4 bg-slate-50 border rounded-2xl font-bold" placeholder="Summary" onChange={e => setNewCaseData({...newCaseData, summary: e.target.value})} />
-                <textarea className="w-full p-4 bg-slate-50 border rounded-2xl font-bold h-32" placeholder="Description..." onChange={e => setNewCaseData({...newCaseData, detailedDesc: e.target.value})} />
-              </div>
-
-              <button onClick={handleCreateCase} disabled={isSaving} className="w-full py-5 bg-red-600 text-white rounded-3xl font-black uppercase tracking-widest disabled:opacity-50">{isSaving ? 'Processing...' : 'Create Case'}</button>
+              <button onClick={handleCreateEmployee} disabled={isSaving} className="w-full py-5 bg-blue-600 text-white rounded-3xl font-black uppercase tracking-widest disabled:opacity-50">{isSaving ? 'Saving...' : 'Onboard Personnel'}</button>
             </div>
           </div>
         )}
@@ -320,9 +347,22 @@ export default function Dashboard() {
                 {profileTab === 'Personal' && (
                   <div className="space-y-6">
                     <div className="p-6 bg-slate-50 rounded-[2.5rem] border space-y-4 shadow-sm">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><Phone size={14}/> Contact</p>
+                      <input disabled={!isEditing} className="w-full bg-white p-4 rounded-2xl border outline-none font-bold" value={selectedEmployee.phoneNumber || ''} onChange={e => setSelectedEmployee({...selectedEmployee, phoneNumber: e.target.value})} placeholder="Mobile Number" />
+                    </div>
+                    <div className="p-6 bg-slate-50 rounded-[2.5rem] border space-y-4 shadow-sm">
                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><MapPin size={14}/> Residence</p>
-                      <input disabled={!isEditing} className="w-full bg-white p-4 rounded-2xl border outline-none font-bold" value={selectedEmployee.addressLine1 || ''} onChange={e => setSelectedEmployee({...selectedEmployee, addressLine1: e.target.value})} />
-                      <input disabled={!isEditing} className="w-full bg-white p-4 rounded-2xl border outline-none font-bold" value={selectedEmployee.postcode || ''} onChange={e => setSelectedEmployee({...selectedEmployee, postcode: e.target.value})} />
+                      <input disabled={!isEditing} className="w-full bg-white p-4 rounded-2xl border outline-none font-bold" value={selectedEmployee.addressLine1 || ''} onChange={e => setSelectedEmployee({...selectedEmployee, addressLine1: e.target.value})} placeholder="Line 1" />
+                      <div className="grid grid-cols-2 gap-2">
+                        <input disabled={!isEditing} className="w-full bg-white p-4 rounded-2xl border outline-none font-bold" value={selectedEmployee.city || ''} onChange={e => setSelectedEmployee({...selectedEmployee, city: e.target.value})} placeholder="City" />
+                        <input disabled={!isEditing} className="w-full bg-white p-4 rounded-2xl border outline-none font-bold" value={selectedEmployee.postcode || ''} onChange={e => setSelectedEmployee({...selectedEmployee, postcode: e.target.value})} placeholder="Postcode" />
+                      </div>
+                    </div>
+                    <div className="p-6 bg-slate-50 rounded-[2.5rem] border space-y-4 shadow-sm">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><HeartPulse size={14}/> Emergency Contact</p>
+                      <input disabled={!isEditing} className="w-full bg-white p-4 rounded-2xl border outline-none font-bold" value={selectedEmployee.emergencyName || ''} onChange={e => setSelectedEmployee({...selectedEmployee, emergencyName: e.target.value})} placeholder="Name" />
+                      <input disabled={!isEditing} className="w-full bg-white p-4 rounded-2xl border outline-none font-bold" value={selectedEmployee.emergencyRel || ''} onChange={e => setSelectedEmployee({...selectedEmployee, emergencyRel: e.target.value})} placeholder="Relationship" />
+                      <input disabled={!isEditing} className="w-full bg-white p-4 rounded-2xl border outline-none font-bold" value={selectedEmployee.emergencyPhone || ''} onChange={e => setSelectedEmployee({...selectedEmployee, emergencyPhone: e.target.value})} placeholder="Emergency Phone" />
                     </div>
                   </div>
                 )}
@@ -332,6 +372,15 @@ export default function Dashboard() {
                       <div className="flex justify-between items-center"><h4 className="text-[10px] font-black uppercase text-slate-400">UK Compliance</h4><button onClick={() => setShowSensitive(!showSensitive)} className="text-[10px] font-bold bg-white/20 px-4 py-2 rounded-full">{showSensitive ? 'HIDE' : 'SHOW'}</button></div>
                       <div className="space-y-2"><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">NI Number</p><input disabled={!isEditing} type={showSensitive || isEditing ? "text" : "password"} className="bg-transparent text-2xl font-mono font-black outline-none w-full" value={selectedEmployee.niNumber || ''} onChange={e => setSelectedEmployee({...selectedEmployee, niNumber: e.target.value})} /></div>
                       <div className="pt-6 border-t border-white/10 flex justify-between"><div><p className="text-[10px] font-bold text-slate-400 uppercase">Annual Salary</p><div className="flex items-center gap-1 text-xl font-black"><span>£</span><input disabled={!isEditing} className="bg-transparent outline-none" value={selectedEmployee.records[0]?.payAmount} onChange={e => updateRecordField('payAmount', Number(e.target.value))} /></div></div></div>
+                    </div>
+                    
+                    <div className="p-6 bg-slate-50 rounded-[2.5rem] border space-y-4 shadow-sm">
+                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><CreditCard size={14}/> Banking Details</p>
+                       <input disabled={!isEditing} className="w-full bg-white p-4 rounded-2xl border outline-none font-bold" value={selectedEmployee.bankDetails?.bankName || ''} onChange={e => updateBankField('bankName', e.target.value)} placeholder="Bank Name" />
+                       <div className="grid grid-cols-2 gap-4">
+                         <input disabled={!isEditing} className="w-full bg-white p-4 rounded-2xl border outline-none font-bold" value={selectedEmployee.bankDetails?.sortCode || ''} onChange={e => updateBankField('sortCode', e.target.value)} placeholder="Sort Code" />
+                         <input disabled={!isEditing} className="w-full bg-white p-4 rounded-2xl border outline-none font-bold" value={selectedEmployee.bankDetails?.accountNumber || ''} onChange={e => updateBankField('accountNumber', e.target.value)} placeholder="Account Number" />
+                       </div>
                     </div>
                   </div>
                 )}
@@ -343,6 +392,44 @@ export default function Dashboard() {
                   <><button onClick={() => handleDeleteEmployee(selectedEmployee.id)} className="py-4 bg-red-50 text-red-600 rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-red-100"><Trash2 size={16}/> Terminate</button><button onClick={() => setIsEditing(true)} className="py-4 bg-slate-900 text-white rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl flex items-center justify-center gap-2"><Edit3 size={16}/> Edit Dossier</button></>
                 )}
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* MODAL: CREATE CASE */}
+        {isAddingCase && (
+          <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/50 backdrop-blur-sm" onClick={() => setIsAddingCase(false)}>
+            <div className="max-w-xl w-full bg-white h-full p-8 overflow-y-auto space-y-6 shadow-2xl animate-in slide-in-from-right duration-500" onClick={e => e.stopPropagation()}>
+              <div className="flex justify-between items-center"><h3 className="text-2xl font-black text-red-600">Open Case File</h3><button onClick={() => setIsAddingCase(false)}><X size={28}/></button></div>
+              <p className="text-sm text-slate-500 font-medium">Initiating formal procedure. Auditable.</p>
+              
+              <div className="space-y-4">
+                <label className="text-xs font-black uppercase text-slate-400 tracking-widest">Subject</label>
+                <select className="w-full p-4 bg-slate-50 border rounded-2xl font-bold" onChange={e => setNewCaseData({...newCaseData, subjectId: e.target.value})}>
+                  <option value="">Select Employee...</option>
+                  {employees.map(e => <option key={e.id} value={e.id}>{e.firstName} {e.lastName}</option>)}
+                </select>
+              </div>
+
+              <div className="space-y-4">
+                <label className="text-xs font-black uppercase text-slate-400 tracking-widest">Classification</label>
+                <div className="grid grid-cols-2 gap-4">
+                  <select className="p-4 bg-slate-50 border rounded-2xl font-bold" onChange={e => setNewCaseData({...newCaseData, type: e.target.value})}>
+                    <option value="DISCIPLINARY">DISCIPLINARY</option><option value="GRIEVANCE">GRIEVANCE</option><option value="CAPABILITY_PERFORMANCE">PERFORMANCE</option>
+                  </select>
+                  <select className="p-4 bg-slate-50 border rounded-2xl font-bold" onChange={e => setNewCaseData({...newCaseData, riskLevel: e.target.value})}>
+                    <option value="HIGH">HIGH RISK</option><option value="MEDIUM">MEDIUM</option><option value="LOW">LOW</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <label className="text-xs font-black uppercase text-slate-400 tracking-widest">Allegation</label>
+                <input className="w-full p-4 bg-slate-50 border rounded-2xl font-bold" placeholder="Summary" onChange={e => setNewCaseData({...newCaseData, summary: e.target.value})} />
+                <textarea className="w-full p-4 bg-slate-50 border rounded-2xl font-bold h-32" placeholder="Description..." onChange={e => setNewCaseData({...newCaseData, detailedDesc: e.target.value})} />
+              </div>
+
+              <button onClick={handleCreateCase} disabled={isSaving} className="w-full py-5 bg-red-600 text-white rounded-3xl font-black uppercase tracking-widest disabled:opacity-50">{isSaving ? 'Processing...' : 'Create Case'}</button>
             </div>
           </div>
         )}
