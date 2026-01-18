@@ -15,36 +15,38 @@ const app = express();
 // Use the port Render gives us, or fallback to 4000 locally
 const PORT = process.env.PORT || 4000;
 
-// Middleware (Allows the frontend to talk to the backend)
-app.use(cors());
+// Middleware - Configured for your specific frontend URL
+app.use(cors({
+  origin: process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(',') : '*',
+  credentials: true
+}));
 app.use(express.json());
 
 // --- ROUTES ---
 
-// 1. Health Check (To test if server is running)
+// 1. Health Check
 app.get('/', (req, res) => {
-  res.send('Employee Platform API is Active 🚀');
+  res.send('Vanguard HR Platform API is Active 🚀');
 });
 
-// 2. UPDATE AN EMPLOYEE (The "Save" button logic)
+// 2. UPDATE AN EMPLOYEE
 app.put('/api/employees/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const { firstName, lastName, role } = req.body;
 
-    console.log(`Update request received for ID: ${id}`, req.body);
+    console.log(`Update request for ID: ${id}`);
 
     const updatedEmployee = await db.employee.update({
       where: { id },
       data: {
         firstName,
         lastName,
-        // @ts-ignore - Ignore strict type checking for the Enum role
+        // @ts-ignore - Bypass Enum check for rapid UK role updates
         role: role, 
       },
     });
 
-    console.log('Successfully updated database for:', updatedEmployee.id);
     res.json(updatedEmployee);
   } catch (error) {
     console.error('Database update error:', error);
@@ -88,6 +90,7 @@ app.get('/api/employees', async (req, res) => {
     });
     res.json(employees);
   } catch (error) {
+    console.error('Fetch error:', error);
     res.status(500).json({ error: 'Failed to fetch employees' });
   }
 });
@@ -124,7 +127,8 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(400).json({ error: 'Invalid password' });
     }
 
-    const secret = process.env.JWT_SECRET || 'super_secret';
+    // Pull secret from .env for security
+    const secret = process.env.JWT_SECRET || 'fallback_super_secret';
     
     const token = jwt.sign(
       { userId: user.id, email: user.email },
@@ -142,5 +146,5 @@ app.post('/api/auth/login', async (req, res) => {
 
 // --- START SERVER ---
 app.listen(PORT, () => {
-  console.log(`\n⚡️ Server is running on port ${PORT}`);
+  console.log(`\n⚡️ Vanguard HR Server is running on port ${PORT}`);
 });
