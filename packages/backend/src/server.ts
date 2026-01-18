@@ -39,9 +39,18 @@ app.put('/api/employees/:id', async (req, res) => {
       data: {
         firstName,
         lastName,
-        role,
+        // We add 'as any' to tell TypeScript: "Trust me, this role is valid"
+        role: role as any, 
       },
     });
+
+    console.log('Successfully updated database for:', updatedEmployee.id);
+    res.json(updatedEmployee);
+  } catch (error) {
+    console.error('Database update error:', error);
+    res.status(500).json({ error: 'Failed to update employee' });
+  }
+});
 
     console.log('Successfully updated database for:', updatedEmployee.id);
     res.json(updatedEmployee);
