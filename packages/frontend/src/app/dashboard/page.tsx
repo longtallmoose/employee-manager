@@ -3,10 +3,10 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
-  Users, ShieldCheck, X, ChevronRight, Search, Plus, 
-  Trash2, Building2, PoundSterling, History, Lock, MapPin, 
+  Users, ShieldCheck, X, ChevronRight, Search, 
+  Trash2, Building2, History, MapPin, 
   Phone, CreditCard, HeartPulse, Save, Edit3, UserPlus, 
-  Briefcase, Scale, AlertTriangle, Gavel
+  Briefcase, Scale, Gavel, Globe, FileText
 } from 'lucide-react';
 
 export default function Dashboard() {
@@ -32,13 +32,18 @@ export default function Dashboard() {
   const [isAddingCase, setIsAddingCase] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   
-  // Forms
+  // --- FULL COMPREHENSIVE FORM STATE ---
   const [newEmployee, setNewEmployee] = useState({ 
     firstName: '', lastName: '', 
-    niNumber: '', phoneNumber: '', rightToWorkStatus: 'PENDING_CHECK',
-    addressLine1: '', city: '', region: '', postcode: '', country: 'UK',
-    emergencyName: '', emergencyPhone: '', emergencyRel: '',
+    niNumber: '', phoneNumber: '', 
+    // Legal & Finance
+    rightToWorkStatus: 'PENDING_CHECK',
     sortCode: '', accountNumber: '', bankName: '',
+    // Address
+    addressLine1: '', addressLine2: '', city: '', region: '', postcode: '', country: 'UK',
+    // Emergency
+    emergencyName: '', emergencyPhone: '', emergencyRel: '',
+    // Job
     jobTitle: '', department: 'OPERATIONS', payAmount: 0
   });
 
@@ -64,13 +69,10 @@ export default function Dashboard() {
       setEmployees(Array.isArray(empData) ? empData : []);
       setCases(Array.isArray(caseData) ? caseData : []);
 
+      // Refresh selected employee data if panel is open to show latest updates
       if (selectedEmployee && Array.isArray(empData)) {
         const updated = empData.find((e:any) => e.id === selectedEmployee.id);
         if (updated) setSelectedEmployee(updated);
-      }
-      if (selectedCase && Array.isArray(caseData)) {
-        const updatedCase = caseData.find((c:any) => c.id === selectedCase.id);
-        if (updatedCase) setSelectedCase(updatedCase);
       }
     } catch (err) { console.error("Dashboard Load Error:", err); }
   };
@@ -78,11 +80,26 @@ export default function Dashboard() {
   useEffect(() => { fetchData(); }, []);
 
   // --- ACTIONS ---
+  
   const handleCreateEmployee = async () => {
-    if (!newEmployee.firstName) return alert("Missing fields");
+    if (!newEmployee.firstName || !newEmployee.lastName) return alert("Name is required");
     setIsSaving(true);
-    await fetch(`${API_BASE}/auth/register`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newEmployee) });
+    
+    await fetch(`${API_BASE}/auth/register`, { 
+      method: 'POST', 
+      headers: { 'Content-Type': 'application/json' }, 
+      body: JSON.stringify(newEmployee) 
+    });
+    
     setIsAddingNew(false);
+    // Reset form
+    setNewEmployee({
+        firstName: '', lastName: '', niNumber: '', phoneNumber: '', 
+        rightToWorkStatus: 'PENDING_CHECK', sortCode: '', accountNumber: '', bankName: '',
+        addressLine1: '', addressLine2: '', city: '', region: '', postcode: '', country: 'UK',
+        emergencyName: '', emergencyPhone: '', emergencyRel: '',
+        jobTitle: '', department: 'OPERATIONS', payAmount: 0
+    });
     fetchData();
     setIsSaving(false);
   };
@@ -92,12 +109,14 @@ export default function Dashboard() {
     setIsSaving(true);
     const currentRecord = selectedEmployee.records[0] || {};
     
-    // Merge Personal + Job + Banking Data
+    // We flatten the data structure for the API update
     const payload = {
       ...selectedEmployee, 
+      // Map Banking Fields explicitly
       sortCode: selectedEmployee.bankDetails?.sortCode,
       accountNumber: selectedEmployee.bankDetails?.accountNumber,
       bankName: selectedEmployee.bankDetails?.bankName,
+      // Map Job Fields
       jobTitle: currentRecord.jobTitle,
       department: currentRecord.department,
       payAmount: currentRecord.payAmount
@@ -114,11 +133,13 @@ export default function Dashboard() {
   };
 
   const handleDeleteEmployee = async (id: string) => {
-    if (!confirm("Terminate record?")) return;
+    if (!confirm("Terminate record? This action is irreversible.")) return;
     await fetch(`${API_BASE}/employees/${id}`, { method: 'DELETE' });
     setIsPanelOpen(false);
     fetchData();
   };
+
+  // --- HELPER FUNCTIONS FOR UPDATING STATE ---
 
   const updateRecordField = (field: string, value: any) => {
     if (!selectedEmployee?.records) return;
@@ -128,8 +149,9 @@ export default function Dashboard() {
 
   const updateBankField = (field: string, value: any) => {
     if (!selectedEmployee) return;
-    const updatedBank = { ...selectedEmployee.bankDetails, [field]: value };
-    setSelectedEmployee({ ...selectedEmployee, bankDetails: updatedBank });
+    // Handle case where bankDetails might be null initially
+    const currentBank = selectedEmployee.bankDetails || { sortCode: '', accountNumber: '', bankName: '' };
+    setSelectedEmployee({ ...selectedEmployee, bankDetails: { ...currentBank, [field]: value } });
   };
 
   const handleCreateCase = async () => {
@@ -234,7 +256,7 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* MODAL: CREATE EMPLOYEE */}
+        {/* --- FULL ONBOARDING MODAL --- */}
         {isAddingNew && (
           <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/50 backdrop-blur-sm" onClick={() => setIsAddingNew(false)}>
             <div className="max-w-xl w-full bg-white h-full p-8 overflow-y-auto space-y-8 shadow-2xl animate-in slide-in-from-right duration-500" onClick={e => e.stopPropagation()}>
@@ -257,6 +279,7 @@ export default function Dashboard() {
               <div className="space-y-4">
                 <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest border-b pb-2">Home Address</p>
                 <input className="w-full p-4 bg-slate-50 border rounded-2xl font-bold" placeholder="Address Line 1" onChange={e => setNewEmployee({...newEmployee, addressLine1: e.target.value})} />
+                <input className="w-full p-4 bg-slate-50 border rounded-2xl font-bold" placeholder="Address Line 2 (Optional)" onChange={e => setNewEmployee({...newEmployee, addressLine2: e.target.value})} />
                 <div className="grid grid-cols-2 gap-4">
                   <input className="p-4 bg-slate-50 border rounded-2xl font-bold" placeholder="City" onChange={e => setNewEmployee({...newEmployee, city: e.target.value})} />
                   <input className="p-4 bg-slate-50 border rounded-2xl font-bold" placeholder="Region/County" onChange={e => setNewEmployee({...newEmployee, region: e.target.value})} />
@@ -267,17 +290,7 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              {/* Emergency Section */}
-              <div className="space-y-4">
-                <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest border-b pb-2">Emergency Contact</p>
-                <div className="grid grid-cols-2 gap-4">
-                  <input className="p-4 bg-slate-50 border rounded-2xl font-bold" placeholder="Contact Name" onChange={e => setNewEmployee({...newEmployee, emergencyName: e.target.value})} />
-                  <input className="p-4 bg-slate-50 border rounded-2xl font-bold" placeholder="Relationship" onChange={e => setNewEmployee({...newEmployee, emergencyRel: e.target.value})} />
-                </div>
-                <input className="w-full p-4 bg-slate-50 border rounded-2xl font-bold" placeholder="Emergency Phone" onChange={e => setNewEmployee({...newEmployee, emergencyPhone: e.target.value})} />
-              </div>
-
-              {/* Finance Section */}
+              {/* Finance & Legal Section */}
               <div className="space-y-4">
                 <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest border-b pb-2">Finance & Legal</p>
                 <div className="grid grid-cols-2 gap-4">
@@ -295,6 +308,16 @@ export default function Dashboard() {
                 </div>
               </div>
 
+              {/* Emergency Section */}
+              <div className="space-y-4">
+                <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest border-b pb-2">Emergency Contact</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <input className="p-4 bg-slate-50 border rounded-2xl font-bold" placeholder="Contact Name" onChange={e => setNewEmployee({...newEmployee, emergencyName: e.target.value})} />
+                  <input className="p-4 bg-slate-50 border rounded-2xl font-bold" placeholder="Relationship" onChange={e => setNewEmployee({...newEmployee, emergencyRel: e.target.value})} />
+                </div>
+                <input className="w-full p-4 bg-slate-50 border rounded-2xl font-bold" placeholder="Emergency Phone" onChange={e => setNewEmployee({...newEmployee, emergencyPhone: e.target.value})} />
+              </div>
+
               {/* Role Section */}
               <div className="space-y-4">
                 <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest border-b pb-2">Role & Pay</p>
@@ -310,10 +333,12 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* DOSSIER: EMPLOYEE */}
+        {/* --- FULL DOSSIER: EMPLOYEE --- */}
         {isPanelOpen && selectedEmployee && (
           <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/50 backdrop-blur-sm" onClick={() => setIsPanelOpen(false)}>
             <div className="max-w-xl w-full bg-white h-full flex flex-col p-8 space-y-8 animate-in slide-in-from-right duration-500 shadow-2xl" onClick={e => e.stopPropagation()}>
+              
+              {/* HEADER */}
               <div className="flex justify-between items-start">
                 <div className="flex items-center gap-5">
                   <div className="w-20 h-20 rounded-[2rem] bg-slate-900 text-white flex items-center justify-center text-3xl font-black">{selectedEmployee.firstName[0]}</div>
@@ -321,9 +346,13 @@ export default function Dashboard() {
                 </div>
                 <button onClick={() => setIsPanelOpen(false)}><X size={28}/></button>
               </div>
+
+              {/* TABS */}
               <div className="flex gap-1 bg-slate-100 p-1.5 rounded-2xl">{['Overview', 'Personal', 'Payroll'].map(t => <button key={t} onClick={() => setProfileTab(t)} className={`flex-1 py-3 rounded-xl text-xs font-black uppercase tracking-widest ${profileTab === t ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}>{t}</button>)}</div>
 
               <div className="flex-1 overflow-y-auto space-y-8">
+                
+                {/* 1. OVERVIEW TAB */}
                 {profileTab === 'Overview' && (
                   <div className="space-y-8">
                     <div className="grid grid-cols-2 gap-4">
@@ -344,20 +373,29 @@ export default function Dashboard() {
                     </div>
                   </div>
                 )}
+
+                {/* 2. PERSONAL TAB (Contact, Address, Emergency) */}
                 {profileTab === 'Personal' && (
                   <div className="space-y-6">
                     <div className="p-6 bg-slate-50 rounded-[2.5rem] border space-y-4 shadow-sm">
                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><Phone size={14}/> Contact</p>
                       <input disabled={!isEditing} className="w-full bg-white p-4 rounded-2xl border outline-none font-bold" value={selectedEmployee.phoneNumber || ''} onChange={e => setSelectedEmployee({...selectedEmployee, phoneNumber: e.target.value})} placeholder="Mobile Number" />
                     </div>
+                    
                     <div className="p-6 bg-slate-50 rounded-[2.5rem] border space-y-4 shadow-sm">
                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><MapPin size={14}/> Residence</p>
                       <input disabled={!isEditing} className="w-full bg-white p-4 rounded-2xl border outline-none font-bold" value={selectedEmployee.addressLine1 || ''} onChange={e => setSelectedEmployee({...selectedEmployee, addressLine1: e.target.value})} placeholder="Line 1" />
+                      <input disabled={!isEditing} className="w-full bg-white p-4 rounded-2xl border outline-none font-bold" value={selectedEmployee.addressLine2 || ''} onChange={e => setSelectedEmployee({...selectedEmployee, addressLine2: e.target.value})} placeholder="Line 2" />
                       <div className="grid grid-cols-2 gap-2">
                         <input disabled={!isEditing} className="w-full bg-white p-4 rounded-2xl border outline-none font-bold" value={selectedEmployee.city || ''} onChange={e => setSelectedEmployee({...selectedEmployee, city: e.target.value})} placeholder="City" />
+                        <input disabled={!isEditing} className="w-full bg-white p-4 rounded-2xl border outline-none font-bold" value={selectedEmployee.region || ''} onChange={e => setSelectedEmployee({...selectedEmployee, region: e.target.value})} placeholder="Region/County" />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
                         <input disabled={!isEditing} className="w-full bg-white p-4 rounded-2xl border outline-none font-bold" value={selectedEmployee.postcode || ''} onChange={e => setSelectedEmployee({...selectedEmployee, postcode: e.target.value})} placeholder="Postcode" />
+                        <input disabled={!isEditing} className="w-full bg-white p-4 rounded-2xl border outline-none font-bold" value={selectedEmployee.country || ''} onChange={e => setSelectedEmployee({...selectedEmployee, country: e.target.value})} placeholder="Country" />
                       </div>
                     </div>
+
                     <div className="p-6 bg-slate-50 rounded-[2.5rem] border space-y-4 shadow-sm">
                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><HeartPulse size={14}/> Emergency Contact</p>
                       <input disabled={!isEditing} className="w-full bg-white p-4 rounded-2xl border outline-none font-bold" value={selectedEmployee.emergencyName || ''} onChange={e => setSelectedEmployee({...selectedEmployee, emergencyName: e.target.value})} placeholder="Name" />
@@ -366,6 +404,8 @@ export default function Dashboard() {
                     </div>
                   </div>
                 )}
+
+                {/* 3. PAYROLL TAB (Legal, Banking, Salary) */}
                 {profileTab === 'Payroll' && (
                   <div className="space-y-6">
                     <div className="p-8 bg-slate-900 rounded-[2.5rem] text-white space-y-6 shadow-2xl relative">
@@ -374,6 +414,19 @@ export default function Dashboard() {
                       <div className="pt-6 border-t border-white/10 flex justify-between"><div><p className="text-[10px] font-bold text-slate-400 uppercase">Annual Salary</p><div className="flex items-center gap-1 text-xl font-black"><span>£</span><input disabled={!isEditing} className="bg-transparent outline-none" value={selectedEmployee.records[0]?.payAmount} onChange={e => updateRecordField('payAmount', Number(e.target.value))} /></div></div></div>
                     </div>
                     
+                    {/* Right to Work */}
+                    <div className="p-6 bg-slate-50 rounded-[2.5rem] border space-y-4 shadow-sm">
+                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><Globe size={14}/> Right to Work</p>
+                       <select disabled={!isEditing} className="w-full bg-white p-4 rounded-2xl border outline-none font-bold" value={selectedEmployee.rightToWorkStatus || 'PENDING_CHECK'} onChange={e => setSelectedEmployee({...selectedEmployee, rightToWorkStatus: e.target.value})}>
+                          <option value="PENDING_CHECK">Pending Check</option>
+                          <option value="BRITISH_CITIZEN">British Citizen</option>
+                          <option value="SETTLED_STATUS">Settled Status</option>
+                          <option value="VISA_TIER_2">Skilled Worker Visa</option>
+                          <option value="VISA_STUDENT">Student Visa</option>
+                       </select>
+                    </div>
+
+                    {/* Banking Details */}
                     <div className="p-6 bg-slate-50 rounded-[2.5rem] border space-y-4 shadow-sm">
                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><CreditCard size={14}/> Banking Details</p>
                        <input disabled={!isEditing} className="w-full bg-white p-4 rounded-2xl border outline-none font-bold" value={selectedEmployee.bankDetails?.bankName || ''} onChange={e => updateBankField('bankName', e.target.value)} placeholder="Bank Name" />
@@ -385,6 +438,8 @@ export default function Dashboard() {
                   </div>
                 )}
               </div>
+
+              {/* ACTION BUTTONS */}
               <div className="p-8 border-t bg-slate-50 grid grid-cols-2 gap-4">
                 {isEditing ? (
                   <><button onClick={() => setIsEditing(false)} className="py-4 bg-white border rounded-2xl font-black uppercase text-xs tracking-widest">Discard</button><button onClick={handleUpdateEmployee} disabled={isSaving} className="py-4 bg-blue-600 text-white rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl flex items-center justify-center gap-2 disabled:opacity-50"><Save size={16}/> {isSaving ? 'Saving...' : 'Save Changes'}</button></>
@@ -396,7 +451,7 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* MODAL: CREATE CASE */}
+        {/* --- MODAL: CREATE CASE --- */}
         {isAddingCase && (
           <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/50 backdrop-blur-sm" onClick={() => setIsAddingCase(false)}>
             <div className="max-w-xl w-full bg-white h-full p-8 overflow-y-auto space-y-6 shadow-2xl animate-in slide-in-from-right duration-500" onClick={e => e.stopPropagation()}>
@@ -434,7 +489,7 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* DOSSIER: CASE */}
+        {/* --- DOSSIER: CASE --- */}
         {isCasePanelOpen && selectedCase && (
           <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/60 backdrop-blur-md" onClick={() => setIsCasePanelOpen(false)}>
             <div className="max-w-xl w-full bg-white h-full flex flex-col shadow-2xl animate-in slide-in-from-right duration-500" onClick={e => e.stopPropagation()}>
