@@ -1,9 +1,7 @@
-// This is the COMPLETE production schema.
+// packages/database/prisma/schema.prisma
 
-// Generator
 generator client {
   provider      = "prisma-client-js"
-  // This is the fix: telling Prisma exactly where to save the files
   output        = "../../backend/node_modules/.prisma/client"
   binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
@@ -12,7 +10,6 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
-
 
 // --------------------------------------
 // ENUMS (UK Context & System)
@@ -109,15 +106,15 @@ enum DocumentCategory {
 model User {
   id                  String    @id @default(uuid())
   email               String    @unique
-  passwordHash        String    // BCrypt
+  passwordHash        String
+  role                UserRole  @default(EMPLOYEE)
   mfaEnabled          Boolean   @default(false)
   mfaSecret           String?
   failedLoginAttempts Int       @default(0)
   lockedUntil         DateTime?
    
-  // Relations
   employee       Employee?
-  auditLogs      AuditLog[] // Actions performed by this user
+  auditLogs       AuditLog[] 
    
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
@@ -128,38 +125,33 @@ model Employee {
   userId          String    @unique
   user            User      @relation(fields: [userId], references: [id])
    
-  // Personal Details (GDPR Sensitive)
   firstName       String
   lastName        String
   preferredName   String?
-  dateOfBirth     DateTime
-  niNumber        String?   // Encrypted in app logic, stored string here
+  dateOfBirth     DateTime?
+  niNumber        String?   
    
-  // Contact
   phoneNumber     String?
-  addressLine1    String
+  addressLine1    String?
   addressLine2    String?
-  city            String
-  postcode        String
+  city            String?
+  postcode        String?
   country         String    @default("UK")
    
-  // Emergency Contact
   emergencyName   String?
   emergencyRel    String?
   emergencyPhone  String?
 
-  // System Metadata
   avatarUrl       String?
   isActive        Boolean   @default(true)
    
-  // Relations - The "Why" behind the "What"
-  records         EmploymentRecord[]
-  documents       Document[]
-  leaveRequests   LeaveRequest[]
-  shifts          Shift[]
-  casesInvolved   CaseInvolvedParty[]
-  training        EmployeeTraining[]
-  bankDetails     BankDetails?
+  records          EmploymentRecord[]
+  documents        Document[]
+  leaveRequests    LeaveRequest[]
+  shifts           Shift[]
+  casesInvolved    CaseInvolvedParty[]
+  training         EmployeeTraining[]
+  bankDetails      BankDetails?
    
   managerId       String?
   manager         Employee?  @relation("DirectReports", fields: [managerId], references: [id])
@@ -169,35 +161,28 @@ model Employee {
   updatedAt       DateTime   @updatedAt
 }
 
-// --------------------------------------
-// OPERATIONAL CORE (The Source of Truth)
-// --------------------------------------
-
-// Versioned history of an employee's role/pay
 model EmploymentRecord {
   id              String         @id @default(uuid())
   employeeId      String
   employee        Employee       @relation(fields: [employeeId], references: [id])
    
   startDate       DateTime
-  endDate         DateTime?      // Null means current
+  endDate         DateTime?      
    
   jobTitle        String
   department      String
-  location        String         // Office ID or Name
+  location        String         
    
-  employmentType  EmploymentType
-  payBasis        PayBasis
-  payAmount       Decimal        @db.Decimal(10, 2) // Hourly rate or Annual Salary
+  employmentType  EmploymentType @default(FULL_TIME)
+  payBasis        PayBasis       @default(SALARIED)
+  payAmount       Decimal        @db.Decimal(12, 2)
   currency        String         @default("GBP")
    
-  hoursPerWeek    Decimal        @db.Decimal(4, 2)
+  hoursPerWeek    Decimal        @db.Decimal(4, 2) @default(37.5)
    
   contractUrl     String?
-   
-  // Audit
-  changeReason    String?        // e.g. "Annual Promotion", "Role Change"
-  changedBy       String         // Admin ID
+  changeReason    String?        
+  changedBy       String?        
    
   createdAt       DateTime       @default(now())
 }
@@ -208,16 +193,12 @@ model BankDetails {
   employee        Employee  @relation(fields: [employeeId], references: [id])
    
   accountName     String
-  sortCode        String    // Stored with simple masking logic in API
-  accountNumber   String    // Stored with simple masking logic in API
+  sortCode        String    
+  accountNumber   String    
   bankName        String?
    
   updatedAt       DateTime  @updatedAt
 }
-
-// --------------------------------------
-// TIME, ATTENDANCE & LEAVE
-// --------------------------------------
 
 model LeaveRequest {
   id              String    @id @default(uuid())
@@ -228,18 +209,12 @@ model LeaveRequest {
   startDate       DateTime
   endDate         DateTime
   isHalfDay       Boolean   @default(false)
-   
   totalDays       Decimal   @db.Decimal(4, 1)
-   
   status          ApprovalStatus @default(PENDING)
-   
   managerNote     String?
   rejectionReason String?
-   
   approvedById    String?
   approvedAt      DateTime?
-   
-  // Link to fit note if sickness
   documentId      String?
    
   createdAt       DateTime  @default(now())
@@ -254,40 +229,28 @@ model Shift {
   startTime       DateTime
   endTime         DateTime
   breakMinutes    Int       @default(0)
-   
   locationId      String
-  roleRequired    String?   // Skill based routing
-   
+  roleRequired    String?   
   isPublished     Boolean   @default(false)
-  isOpenShift     Boolean   @default(false) // Can anyone claim it?
-   
-  actualStart     DateTime? // For time tracking
+  isOpenShift     Boolean   @default(false) 
+  actualStart     DateTime? 
   actualEnd       DateTime?
    
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 }
 
-// --------------------------------------
-// HR CASE MANAGEMENT (UK COMPLIANCE)
-// --------------------------------------
-
 model HRCase {
   id              String    @id @default(uuid())
-  reference       String    @unique // Readable ID e.g., CASE-2023-001
+  reference       String    @unique 
   type            CaseType
-   
   summary         String
   detailedDesc    String    @db.Text
-   
   status          CaseStage
-  riskLevel       String    // Low, Medium, High, Critical
-   
+  riskLevel       String    
   openedAt        DateTime  @default(now())
   closedAt        DateTime?
-   
-  leadHrUserId    String    // The HR advisor managing this
-   
+  leadHrUserId    String    
   involvedParties CaseInvolvedParty[]
   timeline        CaseTimelineEvent[]
   evidence        Document[]
@@ -300,48 +263,35 @@ model CaseInvolvedParty {
   id              String    @id @default(uuid())
   caseId          String
   case            HRCase    @relation(fields: [caseId], references: [id])
-   
   employeeId      String
   employee        Employee  @relation(fields: [employeeId], references: [id])
-   
-  role            String    // Subject, Witness, Complainant, Note Taker
+  role            String    
 }
 
 model CaseTimelineEvent {
   id              String    @id @default(uuid())
   caseId          String
   case            HRCase    @relation(fields: [caseId], references: [id])
-   
   stage           CaseStage
   title           String
   description     String?
   occurredAt      DateTime
-   
   loggedByUserId  String
 }
-
-// --------------------------------------
-// DOCUMENTS & COMPLIANCE
-// --------------------------------------
 
 model Document {
   id              String    @id @default(uuid())
   employeeId      String?
   employee        Employee? @relation(fields: [employeeId], references: [id])
-   
   caseId          String?
   case            HRCase?   @relation(fields: [caseId], references: [id])
-   
   title           String
   category        DocumentCategory
-  storageUrl      String    // S3 path
+  storageUrl      String    
   mimeType        String
   sizeBytes       Int
-   
   uploadedBy      String
-   
-  expiryDate      DateTime? // Essential for Right to Work / Certs
-   
+  expiryDate      DateTime? 
   createdAt       DateTime  @default(now())
 }
 
@@ -349,35 +299,24 @@ model EmployeeTraining {
   id              String    @id @default(uuid())
   employeeId      String
   employee        Employee  @relation(fields: [employeeId], references: [id])
-   
   name            String
   provider        String?
   completedAt     DateTime
   expiresAt       DateTime?
-   
   certificateUrl  String?
-   
   createdAt       DateTime  @default(now())
 }
-
-// --------------------------------------
-// SYSTEM AUDIT (IMMUTABLE LOGS)
-// --------------------------------------
 
 model AuditLog {
   id              String    @id @default(uuid())
   userId          String?
   user            User?     @relation(fields: [userId], references: [id])
-   
-  action          String    // CREATE, UPDATE, DELETE, VIEW_SENSITIVE
-  entityType      String    // Employee, BankDetails, Case
+  action          String    
+  entityType      String    
   entityId        String
-   
-  oldValue        Json?     // JSON snapshot of before state
-  newValue        Json?     // JSON snapshot of after state
-   
+  oldValue        Json?     
+  newValue        Json?     
   ipAddress       String?
   userAgent       String?
-   
   timestamp       DateTime  @default(now())
 }
