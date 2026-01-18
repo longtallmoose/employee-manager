@@ -3,15 +3,16 @@
 // Generator
 generator client {
   provider      = "prisma-client-js"
-  // Supports Mac (native) and Render Cloud (debian-openssl)
+  // This is the fix: telling Prisma exactly where to save the files
+  output        = "../../backend/node_modules/@prisma/client"
   binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
-// Datasource (ONLY ONE ALLOWED)
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
 
 // --------------------------------------
 // ENUMS (UK Context & System)
