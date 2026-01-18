@@ -1,11 +1,12 @@
 generator client {
   provider = "prisma-client-js"
   engineType = "library"
+  previewFeatures = ["driverAdapters"] // <--- ENABLES THE FIX
 }
 
 datasource db {
   provider = "postgresql"
-  // url line is REMOVED for Prisma 7 compatibility
+  // URL is removed. We will use the adapter instead.
 }
 
 enum UserRole {
@@ -122,11 +123,10 @@ model Employee {
   addressLine1    String?            
   addressLine2    String?
   city            String? 
-  region          String?            // <--- Added this to match server.ts
+  region          String?            
   postcode        String?            
   country         String             @default("UK")
   
-  // <--- Added this to match server.ts
   rightToWorkStatus RightToWorkStatus @default(PENDING_CHECK)
 
   emergencyName   String?
