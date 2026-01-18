@@ -5,6 +5,7 @@ import { db } from './lib/db';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import dotenv from 'dotenv';
+import { UserRole, EmploymentType, PayBasis, Department } from '@prisma/client';
 
 dotenv.config();
 
@@ -23,7 +24,7 @@ app.get('/', (req, res) => {
   res.send('Vanguard HR Engine: Active 🚀');
 });
 
-// 1. REGISTER NEW STAFF (Atomic Transaction: User + Employee + First Record)
+// 1. REGISTER NEW STAFF (Atomic Transaction)
 app.post('/api/auth/register', async (req, res) => {
   try {
     const { email, password, firstName, lastName, role, jobTitle, department, payAmount } = req.body;
@@ -35,7 +36,7 @@ app.post('/api/auth/register', async (req, res) => {
         data: {
           email,
           passwordHash: hashedPassword,
-          role: role || 'EMPLOYEE',
+          role: (role as UserRole) || UserRole.EMPLOYEE,
         },
       });
 
@@ -47,12 +48,12 @@ app.post('/api/auth/register', async (req, res) => {
           records: {
             create: {
               jobTitle: jobTitle || 'New Starter',
-              department: department || 'OPERATIONS',
+              department: (department as string) || 'OPERATIONS',
               location: 'Head Office',
               payAmount: payAmount || 0,
               startDate: new Date(),
-              employmentType: 'FULL_TIME',
-              payBasis: 'SALARIED',
+              employmentType: EmploymentType.FULL_TIME,
+              payBasis: PayBasis.SALARIED,
               hoursPerWeek: 37.5,
               changeReason: 'Initial Hire'
             }
@@ -67,39 +68,40 @@ app.post('/api/auth/register', async (req, res) => {
     res.status(201).json({ success: true, data: result });
   } catch (error) {
     console.error('Registration Error:', error);
-    res.status(500).json({ success: false, message: 'Failed to create versioned staff record' });
+    res.status(500).json({ success: false, message: 'Failed to create staff record' });
   }
 });
 
-// 2. UPDATE EMPLOYEE (Versioned logic - Closes old record, opens new one)
+// 2. UPDATE EMPLOYEE (Versioned logic)
 app.put('/api/employees/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const { firstName, lastName, jobTitle, department, payAmount, changeReason } = req.body;
 
     const result = await db.$transaction(async (tx) => {
-      // Update basic details
       const employee = await tx.employee.update({
         where: { id },
         data: { firstName, lastName }
       });
 
-      // Close current active record
       await tx.employmentRecord.updateMany({
         where: { employeeId: id, endDate: null },
         data: { endDate: new Date() }
       });
 
-      // Create new historical record
       const newRecord = await tx.employmentRecord.create({
         data: {
           employeeId: id,
           jobTitle: jobTitle || 'Updated Role',
-          department: department || 'OPERATIONS',
+          department: (department as string) || 'OPERATIONS',
           location: 'Head Office',
           payAmount: payAmount || 0,
           startDate: new Date(),
+          employmentType: EmploymentType.FULL_TIME,
+          payBasis: PayBasis.SALARIED,
+          hoursPerWeek: 37.5,
           changeReason: changeReason || 'Role/Salary Adjustment',
+          changedBy: 'SYSTEM_ADMIN'
         }
       });
 
@@ -113,7 +115,7 @@ app.put('/api/employees/:id', async (req, res) => {
   }
 });
 
-// 3. GET ALL EMPLOYEES (Including current active record)
+// 3. GET ALL EMPLOYEES
 app.get('/api/employees', async (req, res) => {
   try {
     const employees = await db.employee.findMany({
