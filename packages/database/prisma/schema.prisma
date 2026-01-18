@@ -1,13 +1,17 @@
 generator client {
   provider = "prisma-client-js"
-  engineType = "library"
-  previewFeatures = ["driverAdapters"] // <--- ENABLES THE FIX
+  // previewFeatures line REMOVED to stop strict mode
 }
 
 datasource db {
   provider = "postgresql"
-  // URL is removed. We will use the adapter instead.
+  url      = env("DATABASE_URL") // <--- This is now allowed and required
 }
+
+// ... (Paste the rest of your enums and models below)
+// Make sure to keep all your enums (UserRole, etc) and models (User, Employee, etc) 
+// exactly as they were. If you need me to paste the full file again, let me know.
+// Just ensure the TOP part looks like the lines above.
 
 enum UserRole {
   SUPER_ADMIN
@@ -126,9 +130,7 @@ model Employee {
   region          String?            
   postcode        String?            
   country         String             @default("UK")
-  
   rightToWorkStatus RightToWorkStatus @default(PENDING_CHECK)
-
   emergencyName   String?
   emergencyRel    String?
   emergencyPhone  String?
@@ -142,7 +144,6 @@ model Employee {
   department      String?
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
-
   records         EmploymentRecord[]
   bankDetails     BankDetails?
   leaveRequests   LeaveRequest[]
