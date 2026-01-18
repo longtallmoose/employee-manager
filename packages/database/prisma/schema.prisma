@@ -4,7 +4,7 @@
 generator client {
   provider      = "prisma-client-js"
   // This is the fix: telling Prisma exactly where to save the files
-  output        = "../../backend/node_modules/@prisma/client"
+  output        = "../../backend/node_modules/.prisma/client"
   binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
